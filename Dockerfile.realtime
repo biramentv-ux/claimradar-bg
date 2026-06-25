@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    WHISPER_MODEL_SIZE=small \
+    WHISPER_DEVICE=cpu \
+    WHISPER_COMPUTE_TYPE=int8 \
+    STREAM_PORT=7861 \
+    REALTIME_INTERVAL=1.6
+
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg curl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
+COPY streaming_server.py /app/streaming_server.py
+
+EXPOSE 7861
+CMD ["python", "streaming_server.py"]
