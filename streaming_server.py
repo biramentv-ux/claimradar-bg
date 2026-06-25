@@ -4,20 +4,22 @@ import re
 import tempfile
 import time
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper import WhisperModel
 
-APP_VERSION = "streaming-0.1"
-MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
+APP_VERSION = "realtime-1.0"
+MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-MIN_TRANSCRIBE_SECONDS = float(os.getenv("STREAM_MIN_SECONDS", "8"))
-MAX_BUFFER_MB = int(os.getenv("STREAM_MAX_BUFFER_MB", "50"))
+REALTIME_INTERVAL = float(os.getenv("REALTIME_INTERVAL", "1.6"))
+ROLLING_WINDOW_MB = int(os.getenv("ROLLING_WINDOW_MB", "18"))
+MAX_BUFFER_MB = int(os.getenv("STREAM_MAX_BUFFER_MB", "80"))
+LANGUAGE = os.getenv("STREAM_LANGUAGE", "bg")
 
-app = FastAPI(title="ClaimRadar BG Streaming STT", version=APP_VERSION)
+app = FastAPI(title="ClaimRadar BG Realtime STT", version=APP_VERSION)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -108,11 +110,15 @@ def score_claim(sentence: str):
         label = "мнение"
     else:
         label = "нужни са източници"
-    return score, label, ", ".join(reasons) or "streaming speech-to-text"
+    return score, label, ", ".join(reasons) or "realtime speech-to-text"
 
 
 def analyze_claims(text: str) -> List[Dict[str, Any]]:
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+|\n+", re.sub(r"\s+", " ", text or "")) if len(s.strip()) > 25]
+    sentences = [
+        s.strip()
+        for s in re.split(r"(?<=[.!?])\s+|\n+", re.sub(r"\s+", " ", text or ""))
+        if len(s.strip()) > 25
+    ]
     claims = []
     for sentence in sentences[-20:]:
         score, label, reason = score_claim(sentence)
@@ -120,48 +126,99 @@ def analyze_claims(text: str) -> List[Dict[str, Any]]:
             continue
         topic = topic_for(sentence)
         sources = [{"name": name, "url": SOURCE_LINKS[name]} for name in TOPIC_SOURCES.get(topic, TOPIC_SOURCES["друго"])]
-        claims.append({
-            "claim": sentence,
-            "topic": topic,
-            "label": label,
-            "confidence": score,
-            "reason": reason,
-            "sources": sources,
-        })
+        claims.append({"claim": sentence, "topic": topic, "label": label, "confidence": score, "reason": reason, "sources": sources})
     return claims[-8:]
 
 
-def transcribe_buffer(buffer: bytearray, suffix: str = ".webm") -> str:
-    if not buffer:
-        return ""
+def buffer_to_file(buffer: bytearray, suffix: str = ".webm") -> str:
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp.write(buffer)
+    tmp.close()
+    return tmp.name
+
+
+def transcribe_buffer(buffer: bytearray, suffix: str = ".webm", word_timestamps: bool = False) -> Tuple[str, List[Dict[str, Any]]]:
+    if not buffer:
+        return "", []
+    tmp_path = buffer_to_file(buffer, suffix)
     try:
-        tmp.write(buffer)
-        tmp.close()
-        segments, _ = get_model().transcribe(tmp.name, language="bg", beam_size=1, vad_filter=True)
-        return " ".join(seg.text.strip() for seg in segments).strip()
+        segments, _ = get_model().transcribe(
+            tmp_path,
+            language=LANGUAGE,
+            beam_size=1,
+            best_of=1,
+            vad_filter=True,
+            word_timestamps=word_timestamps,
+            condition_on_previous_text=False,
+            without_timestamps=False,
+        )
+        text_parts = []
+        words = []
+        for seg in segments:
+            seg_text = (seg.text or "").strip()
+            if seg_text:
+                text_parts.append(seg_text)
+            if word_timestamps and getattr(seg, "words", None):
+                for word in seg.words:
+                    token = (word.word or "").strip()
+                    if token:
+                        words.append({"word": token, "start": float(word.start or 0), "end": float(word.end or 0), "probability": float(word.probability or 0)})
+        return " ".join(text_parts).strip(), words
     finally:
         try:
-            Path(tmp.name).unlink(missing_ok=True)
+            Path(tmp_path).unlink(missing_ok=True)
         except Exception:
             pass
 
 
+def normalize_words(words: List[Dict[str, Any]]) -> List[str]:
+    return [re.sub(r"\s+", " ", w.get("word", "")).strip() for w in words if w.get("word")]
+
+
+def diff_new_words(previous: List[str], current: List[str]) -> List[str]:
+    if not current:
+        return []
+    if not previous:
+        return current
+    max_overlap = min(len(previous), len(current), 80)
+    overlap = 0
+    for size in range(max_overlap, 0, -1):
+        if previous[-size:] == current[:size]:
+            overlap = size
+            break
+    if overlap:
+        return current[overlap:]
+    joined_prev = " ".join(previous[-40:]).lower()
+    start = 0
+    for i, word in enumerate(current):
+        if word.lower() not in joined_prev:
+            start = i
+            break
+    return current[start:]
+
+
+def trim_buffer(buffer: bytearray, max_mb: int) -> bytearray:
+    max_bytes = max_mb * 1024 * 1024
+    if len(buffer) <= max_bytes:
+        return buffer
+    return bytearray(buffer[-max_bytes:])
+
+
 @app.get("/health")
 def health():
-    return {"ok": True, "version": APP_VERSION, "model": MODEL_SIZE, "device": DEVICE, "compute_type": COMPUTE_TYPE}
+    return {"ok": True, "version": APP_VERSION, "model": MODEL_SIZE, "device": DEVICE, "compute_type": COMPUTE_TYPE, "language": LANGUAGE}
 
 
-@app.websocket("/ws/transcribe")
-async def ws_transcribe(websocket: WebSocket):
+async def receive_stream(websocket: WebSocket, realtime: bool):
     await websocket.accept()
     buffer = bytearray()
-    transcript = ""
-    last_transcribe = 0.0
     suffix = ".webm"
     started = time.time()
+    last_transcribe = 0.0
+    stable_words: List[str] = []
+    stable_text = ""
+    await websocket.send_text(json.dumps({"status": "Realtime backend connected.", "partial": True, "words": []}, ensure_ascii=False))
     try:
-        await websocket.send_text(json.dumps({"status": "Streaming backend connected.", "partial": True}, ensure_ascii=False))
         while True:
             message = await websocket.receive()
             if "text" in message:
@@ -172,35 +229,59 @@ async def ws_transcribe(websocket: WebSocket):
                 if payload.get("mimeType", "").startswith("audio/webm"):
                     suffix = ".webm"
                 if payload.get("type") == "stop":
-                    transcript = transcribe_buffer(buffer, suffix=suffix)
+                    transcript, words = transcribe_buffer(buffer, suffix=suffix, word_timestamps=True)
                     await websocket.send_text(json.dumps({
                         "status": "Final transcript ready.",
                         "transcript": transcript,
+                        "words": normalize_words(words),
+                        "new_words": diff_new_words(stable_words, normalize_words(words)),
                         "claims": analyze_claims(transcript),
                         "partial": False,
+                        "elapsed": round(time.time() - started, 2),
                     }, ensure_ascii=False))
                     break
                 continue
 
             if "bytes" in message:
                 buffer.extend(message["bytes"])
-                max_bytes = MAX_BUFFER_MB * 1024 * 1024
-                if len(buffer) > max_bytes:
-                    buffer = buffer[-max_bytes:]
+                buffer = trim_buffer(buffer, MAX_BUFFER_MB)
                 now = time.time()
-                if now - last_transcribe >= MIN_TRANSCRIBE_SECONDS:
-                    last_transcribe = now
-                    transcript = transcribe_buffer(buffer, suffix=suffix)
-                    await websocket.send_text(json.dumps({
-                        "status": f"Partial transcript: {len(transcript)} chars, {int(now - started)} sec.",
-                        "transcript": transcript,
-                        "claims": analyze_claims(transcript),
-                        "partial": True,
-                    }, ensure_ascii=False))
+                interval = REALTIME_INTERVAL if realtime else float(os.getenv("STREAM_MIN_SECONDS", "8"))
+                if now - last_transcribe < interval:
+                    continue
+                last_transcribe = now
+                rolling = trim_buffer(bytearray(buffer), ROLLING_WINDOW_MB if realtime else MAX_BUFFER_MB)
+                transcript, words = transcribe_buffer(rolling, suffix=suffix, word_timestamps=realtime)
+                current_words = normalize_words(words) if realtime else transcript.split()
+                new_words = diff_new_words(stable_words, current_words)
+                if new_words:
+                    stable_words.extend(new_words)
+                    stable_words = stable_words[-500:]
+                stable_text = " ".join(stable_words).strip() or transcript
+                await websocket.send_text(json.dumps({
+                    "status": f"Realtime: +{len(new_words)} words · {len(stable_text)} chars · {int(now - started)} sec.",
+                    "transcript": stable_text,
+                    "window_transcript": transcript,
+                    "words": current_words[-80:],
+                    "new_words": new_words,
+                    "claims": analyze_claims(stable_text),
+                    "partial": True,
+                    "elapsed": round(now - started, 2),
+                }, ensure_ascii=False))
     except WebSocketDisconnect:
         return
     except Exception as exc:
-        await websocket.send_text(json.dumps({"status": "Streaming error: " + str(exc), "partial": True}, ensure_ascii=False))
+        await websocket.send_text(json.dumps({"status": "Realtime error: " + str(exc), "partial": True}, ensure_ascii=False))
+
+
+@app.websocket("/ws/transcribe")
+async def ws_transcribe(websocket: WebSocket):
+    await receive_stream(websocket, realtime=False)
+
+
+@app.websocket("/ws/realtime")
+async def ws_realtime(websocket: WebSocket):
+    await receive_stream(websocket, realtime=True)
 
 
 if __name__ == "__main__":
