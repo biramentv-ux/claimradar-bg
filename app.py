@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from faster_whisper import WhisperModel
 
 APP_TITLE = "ClaimRadar BG"
-APP_VERSION = "2.0-hf-realtime"
+APP_VERSION = "2.1-animated-redesign"
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://dyrakarmy-claimradar-bg.hf.space")
 DISCLAIMER = "Тестов инструмент: резултатите са ориентир за проверка, не окончателна правна, политическа или журналистическа оценка."
 
@@ -232,7 +232,7 @@ def build_search_url(query):
 
 def search_web(query, limit=3):
     search_url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
-    request = urllib.request.Request(search_url, headers={"User-Agent": "Mozilla/5.0 ClaimRadarBG/2.0"})
+    request = urllib.request.Request(search_url, headers={"User-Agent": "Mozilla/5.0 ClaimRadarBG/2.1"})
     try:
         with urllib.request.urlopen(request, timeout=SEARCH_TIMEOUT) as response:
             html = response.read().decode("utf-8", errors="ignore")
@@ -271,13 +271,7 @@ def collect_evidence(claim, topic, per_query=2):
     for source_name, query in evidence_queries_for_claim(claim, topic):
         found = search_web(query, limit=per_query)
         if not found:
-            evidence.append({
-                "source": source_name,
-                "title": "Отвори ръчно търсене",
-                "url": build_search_url(query),
-                "snippet": "Автоматичното търсене не върна резултат. Отвори линка и провери ръчно.",
-                "manual": True,
-            })
+            evidence.append({"source": source_name, "title": "Отвори ръчно търсене", "url": build_search_url(query), "snippet": "Автоматичното търсене не върна резултат. Отвори линка и провери ръчно.", "manual": True})
             continue
         for item in found:
             if item["url"] in used_urls:
@@ -305,17 +299,17 @@ def evaluate_evidence(evidence):
 
 def render_results(rows):
     if not rows:
-        return '<div class="empty-state">Няма открити ясни проверими твърдения.</div>', "Няма открити ясни проверими твърдения."
+        return '<div class="empty-state section-frame">Няма открити ясни проверими твърдения.</div>', "Няма открити ясни проверими твърдения."
     cards = ['<div class="results-grid">']
     copy_lines = [f"ClaimRadar BG v{APP_VERSION}", DISCLAIMER, ""]
     for idx, item in enumerate(rows, 1):
         source_html = "".join([f'<a class="source-chip" href="{escape(src["url"])}" target="_blank">{escape(src["name"])}</a>' for src in item["sources"]])
         confidence = int(item["confidence"])
         cards.append(f"""
-<div class="claim-card">
+<div class="claim-card reveal-card">
   <div class="claim-top"><span class="claim-index">#{idx:02}</span><span class="topic-pill">{escape(item["topic"])}</span><span class="label-pill">{escape(item["label"])}</span></div>
   <div class="claim-text">{escape(item["claim"])}</div>
-  <div class="meter"><span style="width:{confidence}%"></span></div>
+  <div class="meter shimmer"><span style="width:{confidence}%"></span></div>
   <div class="meta-line">Увереност: <b>{confidence}%</b> · Причина: {escape(item["reason"])}</div>
   <div class="sources-row">{source_html}</div>
   <div class="caution">Провери ръчно преди публикуване.</div>
@@ -328,7 +322,7 @@ def render_results(rows):
 
 def render_real_check(rows):
     if not rows:
-        return '<div class="empty-state">Няма твърдения за онлайн проверка.</div>', "Няма твърдения за онлайн проверка.", []
+        return '<div class="empty-state section-frame">Няма твърдения за онлайн проверка.</div>', "Няма твърдения за онлайн проверка.", []
     cards = ['<div class="results-grid">']
     copy_lines = [f"ClaimRadar BG v{APP_VERSION} — онлайн проверка", DISCLAIMER, ""]
     saved_items = []
@@ -341,10 +335,10 @@ def render_real_check(rows):
             ev_html.append(f'<a class="{cls}" href="{escape(ev["url"])}" target="_blank"><b>{ev_idx}. {escape(ev.get("source", "източник"))}</b><span>{escape(ev.get("title", "линк"))}</span><small>{escape(ev.get("snippet", ""))}</small></a>')
             ev_copy.append(f'{ev_idx}. {ev.get("source", "източник")}: {ev.get("title", "линк")} — {ev.get("url", "")}' )
         cards.append(f"""
-<div class="claim-card evidence-card">
+<div class="claim-card evidence-card reveal-card">
   <div class="claim-top"><span class="claim-index">LIVE #{idx:02}</span><span class="topic-pill">{escape(item["topic"])}</span><span class="label-pill">{escape(verdict)}</span></div>
   <div class="claim-text">{escape(item["claim"])}</div>
-  <div class="meter"><span style="width:{verdict_score}%"></span></div>
+  <div class="meter shimmer"><span style="width:{verdict_score}%"></span></div>
   <div class="meta-line"><b>Индикативна оценка:</b> {escape(verdict)} · {escape(explanation)}</div>
   <div class="evidence-list">{"".join(ev_html)}</div>
   <div class="caution">Това не е финална присъда. Отвори линковете и сравни твърдението с първичните данни.</div>
@@ -388,22 +382,22 @@ def save_public_check(title, text, mode):
 def load_public_check(check_id):
     check_id = (check_id or "").strip()
     if not check_id:
-        return '<div class="empty-state">Въведи ID на проверка.</div>', ""
+        return '<div class="empty-state section-frame">Въведи ID на проверка.</div>', ""
     for rec in read_jsonl(CHECKS_FILE, limit=500):
         if rec.get("id") == check_id:
-            header = f'<div class="archive-head"><b>{escape(rec.get("title", "Проверка"))}</b><span>ID: {escape(check_id)} · {escape(rec.get("created_at", ""))} · {escape(rec.get("mode", ""))}</span></div>'
+            header = f'<div class="archive-head reveal-card"><b>{escape(rec.get("title", "Проверка"))}</b><span>ID: {escape(check_id)} · {escape(rec.get("created_at", ""))} · {escape(rec.get("mode", ""))}</span></div>'
             return header + rec.get("html", ""), rec.get("copy_text", "")
-    return '<div class="empty-state">Не е намерена проверка с това ID. На free Space локалният архив може да се изтрие при рестарт.</div>', ""
+    return '<div class="empty-state section-frame">Не е намерена проверка с това ID. На free Space локалният архив може да се изтрие при рестарт.</div>', ""
 
 
 def list_public_checks():
     rows = read_jsonl(CHECKS_FILE, limit=30)
     if not rows:
-        return '<div class="empty-state">Все още няма запазени публични проверки.</div>'
+        return '<div class="empty-state section-frame">Все още няма запазени публични проверки.</div>'
     cards = ['<div class="history-grid">']
     for rec in rows:
         cards.append(f"""
-<div class="history-card">
+<div class="history-card reveal-card">
   <b>{escape(rec.get("title", "Проверка"))}</b>
   <span>{escape(rec.get("created_at", ""))} · {escape(rec.get("mode", ""))}</span>
   <code>{escape(rec.get("id", ""))}</code>
@@ -484,19 +478,50 @@ def save_feedback(name, email, kind, comment):
 
 def admin_panel(key):
     if ADMIN_KEY and key != ADMIN_KEY:
-        return '<div class="empty-state">Грешен admin key.</div>'
+        return '<div class="section-frame admin-card reveal-card"><div class="status-pill danger"><span class="live-dot red"></span> Грешен admin key</div></div>'
     if not ADMIN_KEY:
-        return '<div class="empty-state">ADMIN_KEY не е зададен в Space Variables. Админ панелът е заключен.</div>'
-    checks = read_jsonl(CHECKS_FILE, limit=20)
-    feedback = read_jsonl(FEEDBACK_FILE, limit=50)
-    html = ['<div class="admin-grid"><div class="claim-card"><h3>Последни проверки</h3>']
-    for rec in checks:
-        html.append(f'<p><b>{escape(rec.get("title",""))}</b><br><code>{escape(rec.get("id",""))}</code> · {escape(rec.get("created_at",""))}</p>')
-    html.append('</div><div class="claim-card"><h3>Feedback</h3>')
-    for fb in feedback:
-        html.append(f'<p><b>{escape(fb.get("kind",""))}</b> · {escape(fb.get("created_at",""))}<br>{escape(fb.get("comment",""))}</p>')
+        return '<div class="section-frame admin-card reveal-card"><div class="status-pill"><span class="live-dot"></span> ADMIN_KEY не е зададен в Space Variables. Админ панелът е заключен.</div></div>'
+    checks = read_jsonl(CHECKS_FILE, limit=100)
+    feedback = read_jsonl(FEEDBACK_FILE, limit=100)
+    latest_checks = checks[:12]
+    latest_feedback = feedback[:14]
+    html = ["<div class='admin-shell'>"]
+    html.append(f"""
+<div class="metric-grid">
+  <div class="metric-card reveal-card"><div class="metric-label">Saved Checks</div><div class="metric-value" data-counter="{len(checks)}">0</div><div class="metric-sub">локален JSONL архив</div></div>
+  <div class="metric-card reveal-card"><div class="metric-label">Feedback Items</div><div class="metric-value" data-counter="{len(feedback)}">0</div><div class="metric-sub">потребителски сигнали</div></div>
+  <div class="metric-card reveal-card"><div class="metric-label">Realtime</div><div class="metric-value"><span class="live-dot"></span> Active</div><div class="metric-sub">/ws/realtime</div></div>
+  <div class="metric-card reveal-card"><div class="metric-label">System Mode</div><div class="metric-value">HF Ready</div><div class="metric-sub">{escape(APP_VERSION)}</div></div>
+</div>
+""")
+    html.append("<div class='admin-grid'>")
+    html.append("<div class='admin-card reveal-card'><h3>Последни проверки</h3><div class='timeline'>")
+    if not latest_checks:
+        html.append("<div class='timeline-item'>Няма запазени проверки.</div>")
+    for rec in latest_checks:
+        html.append(f"""
+<div class="timeline-item">
+  <b>{escape(rec.get('title','Проверка'))}</b><br>
+  <small>{escape(rec.get('id',''))} · {escape(rec.get('created_at',''))} · {escape(rec.get('mode',''))}</small><br>
+  <span>{escape(rec.get('text_preview','')[:180])}</span>
+</div>
+""")
     html.append("</div></div>")
-    return "\n".join(html)
+    html.append("<div class='admin-card reveal-card'><h3>Feedback поток</h3><div class='timeline'>")
+    if not latest_feedback:
+        html.append("<div class='timeline-item'>Няма обратна връзка.</div>")
+    for fb in latest_feedback:
+        html.append(f"""
+<div class="timeline-item">
+  <b>{escape(fb.get('kind','друго'))}</b><br>
+  <small>{escape(fb.get('created_at',''))} · {escape(fb.get('email',''))}</small><br>
+  <span>{escape(fb.get('comment','')[:220])}</span>
+</div>
+""")
+    html.append("</div></div></div>")
+    html.append("<div class='admin-card reveal-card'><h3>System Health</h3><div class='status-row'><span class='status-pill'><span class='live-dot'></span> WebSocket: /ws/realtime</span><span class='status-pill'>Model: " + escape(MODEL_SIZE) + "</span><span class='status-pill'>Device: " + escape(DEVICE) + "</span><span class='status-pill'>Compute: " + escape(COMPUTE_TYPE) + "</span></div></div>")
+    html.append("</div>")
+    return "".join(html)
 
 
 def buffer_to_file(buffer: bytearray, suffix: str = ".webm") -> str:
@@ -511,16 +536,7 @@ def transcribe_buffer(buffer: bytearray, suffix: str = ".webm", word_timestamps:
         return "", []
     tmp_path = buffer_to_file(buffer, suffix)
     try:
-        segments, _ = get_model().transcribe(
-            tmp_path,
-            language=LANGUAGE,
-            beam_size=1,
-            best_of=1,
-            vad_filter=True,
-            word_timestamps=word_timestamps,
-            condition_on_previous_text=False,
-            without_timestamps=False,
-        )
+        segments, _ = get_model().transcribe(tmp_path, language=LANGUAGE, beam_size=1, best_of=1, vad_filter=True, word_timestamps=word_timestamps, condition_on_previous_text=False, without_timestamps=False)
         text_parts, words = [], []
         for seg in segments:
             if (seg.text or "").strip():
@@ -586,15 +602,7 @@ async def receive_realtime(websocket: WebSocket, realtime=True):
                 if payload.get("type") == "stop":
                     transcript, words = transcribe_buffer(buffer, suffix=suffix, word_timestamps=True)
                     current_words = normalize_words(words)
-                    await websocket.send_text(json.dumps({
-                        "status": "Final transcript ready.",
-                        "transcript": transcript,
-                        "words": current_words,
-                        "new_words": diff_new_words(stable_words, current_words),
-                        "claims": analyze_claims(transcript, max_claims=20)[-8:],
-                        "partial": False,
-                        "elapsed": round(time.time() - started, 2),
-                    }, ensure_ascii=False))
+                    await websocket.send_text(json.dumps({"status": "Final transcript ready.", "transcript": transcript, "words": current_words, "new_words": diff_new_words(stable_words, current_words), "claims": analyze_claims(transcript, max_claims=20)[-8:], "partial": False, "elapsed": round(time.time() - started, 2)}, ensure_ascii=False))
                     break
                 continue
             if "bytes" in message:
@@ -613,16 +621,7 @@ async def receive_realtime(websocket: WebSocket, realtime=True):
                     stable_words.extend(new_words)
                     stable_words = stable_words[-500:]
                 stable_text = " ".join(stable_words).strip() or transcript
-                await websocket.send_text(json.dumps({
-                    "status": f"Realtime: +{len(new_words)} words · {len(stable_text)} chars · {int(now - started)} sec.",
-                    "transcript": stable_text,
-                    "window_transcript": transcript,
-                    "words": current_words[-80:],
-                    "new_words": new_words,
-                    "claims": analyze_claims(stable_text, max_claims=20)[-8:],
-                    "partial": True,
-                    "elapsed": round(now - started, 2),
-                }, ensure_ascii=False))
+                await websocket.send_text(json.dumps({"status": f"Realtime: +{len(new_words)} words · {len(stable_text)} chars · {int(now - started)} sec.", "transcript": stable_text, "window_transcript": transcript, "words": current_words[-80:], "new_words": new_words, "claims": analyze_claims(stable_text, max_claims=20)[-8:], "partial": True, "elapsed": round(now - started, 2)}, ensure_ascii=False))
     except WebSocketDisconnect:
         return
     except Exception as exc:
@@ -633,19 +632,40 @@ async def receive_realtime(websocket: WebSocket, realtime=True):
 
 
 CSS = """
-:root{--neon-cyan:#22d3ee;--neon-purple:#a855f7;--neon-blue:#2563eb}.gradio-container{max-width:1220px!important;margin:auto!important;background:radial-gradient(circle at 10% 10%,rgba(34,211,238,.18),transparent 26%),radial-gradient(circle at 82% 16%,rgba(168,85,247,.20),transparent 24%),radial-gradient(circle at 50% 100%,rgba(37,99,235,.14),transparent 32%),#020617!important}body,.gradio-container{color:#e5e7eb!important}#neon-hero{position:relative;padding:34px;border-radius:28px;overflow:hidden;border:1px solid rgba(34,211,238,.28);background:linear-gradient(135deg,rgba(2,6,23,.95),rgba(30,27,75,.82));box-shadow:0 0 42px rgba(34,211,238,.16),inset 0 0 80px rgba(168,85,247,.10)}#neon-hero:before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(34,211,238,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.09) 1px,transparent 1px);background-size:36px 36px;mask-image:linear-gradient(to bottom,white,transparent)}.hero-content{position:relative;z-index:2}.hero-kicker{color:var(--neon-cyan);letter-spacing:.22em;text-transform:uppercase;font-size:12px;font-weight:800}.hero-title{margin:10px 0 8px;font-size:clamp(34px,7vw,72px);line-height:.9;font-weight:950;color:white;text-shadow:0 0 24px rgba(34,211,238,.32)}.hero-subtitle{max-width:900px;color:#cbd5e1;font-size:18px}.stat-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}.stat-chip{border:1px solid rgba(168,85,247,.28);background:rgba(15,23,42,.62);border-radius:999px;padding:9px 14px;color:#e0f2fe}.gr-button-primary{background:linear-gradient(90deg,#0891b2,#7c3aed)!important;border:0!important;box-shadow:0 0 22px rgba(34,211,238,.22)!important}.results-grid,.history-grid,.admin-grid{display:grid;gap:16px}.claim-card,.history-card{border:1px solid rgba(34,211,238,.22);background:linear-gradient(135deg,rgba(15,23,42,.82),rgba(30,41,59,.62));border-radius:22px;padding:18px;box-shadow:0 0 26px rgba(34,211,238,.08)}.evidence-card{border-color:rgba(168,85,247,.35);box-shadow:0 0 30px rgba(168,85,247,.12)}.claim-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.claim-index{color:#67e8f9;font-family:ui-monospace,monospace;font-weight:900}.topic-pill,.label-pill,.source-chip{display:inline-flex;border-radius:999px;padding:6px 10px;font-size:12px;text-decoration:none}.topic-pill{background:rgba(37,99,235,.18);color:#bfdbfe;border:1px solid rgba(59,130,246,.25)}.label-pill{background:rgba(168,85,247,.18);color:#e9d5ff;border:1px solid rgba(168,85,247,.28)}.claim-text{font-size:16px;color:#f8fafc;line-height:1.55}.meter{height:7px;border-radius:999px;background:rgba(148,163,184,.17);overflow:hidden;margin:14px 0 8px}.meter span{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#a855f7);border-radius:999px}.meta-line{color:#cbd5e1;font-size:13px;margin-bottom:12px}.sources-row{display:flex;flex-wrap:wrap;gap:8px}.source-chip{color:#cffafe!important;border:1px solid rgba(34,211,238,.24);background:rgba(8,145,178,.12)}.evidence-list{display:grid;gap:10px;margin-top:12px}.evidence-link{display:grid;gap:4px;text-decoration:none!important;color:#e0f2fe!important;border:1px solid rgba(34,211,238,.22);background:rgba(2,6,23,.36);border-radius:16px;padding:12px}.evidence-link span{color:#fff}.evidence-link small{color:#94a3b8;line-height:1.35}.evidence-link.manual{border-style:dashed;color:#fde68a!important}.caution{margin-top:12px;color:#fbbf24;font-size:12px}.empty-state{border:1px dashed rgba(148,163,184,.35);border-radius:20px;padding:24px;color:#cbd5e1;background:rgba(15,23,42,.5)}.footer-note,.history-card span,.history-card p{color:#94a3b8;font-size:13px}.archive-head{border:1px solid rgba(34,211,238,.22);border-radius:18px;padding:14px;margin-bottom:14px;background:rgba(15,23,42,.55);display:grid;gap:4px}.archive-head span{color:#94a3b8}
+:root{--bg:#020617;--panel:rgba(15,23,42,.60);--panel2:rgba(30,41,59,.50);--cyan:#22d3ee;--purple:#a855f7;--blue:#2563eb;--text:#f8fafc;--muted:#94a3b8;--border:rgba(34,211,238,.20);--shadow-cyan:0 0 28px rgba(34,211,238,.13);--shadow-purple:0 0 28px rgba(168,85,247,.13)}
+html,body,.gradio-container{background:radial-gradient(circle at 10% 10%,rgba(34,211,238,.16),transparent 23%),radial-gradient(circle at 86% 12%,rgba(168,85,247,.20),transparent 25%),radial-gradient(circle at 50% 100%,rgba(37,99,235,.14),transparent 28%),linear-gradient(180deg,#020617 0%,#071126 100%)!important;color:var(--text)!important}.gradio-container{max-width:1280px!important;margin:auto!important;position:relative;overflow:hidden}.gradio-container:before{content:"";position:fixed;inset:0;background-image:linear-gradient(rgba(34,211,238,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.05) 1px,transparent 1px);background-size:36px 36px;pointer-events:none;animation:gridMove 18s linear infinite;opacity:.38}.gradio-container:after{content:"";position:fixed;width:420px;height:420px;right:-130px;top:18%;background:radial-gradient(circle,rgba(168,85,247,.20),transparent 64%);filter:blur(18px);pointer-events:none;animation:orbFloat 12s ease-in-out infinite alternate}@keyframes gridMove{to{transform:translateY(36px)}}@keyframes orbFloat{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(-45px,35px,0) scale(1.15)}}
+#hero-shell{position:relative;border:1px solid rgba(34,211,238,.25);border-radius:30px;overflow:hidden;padding:34px;background:linear-gradient(135deg,rgba(2,6,23,.94),rgba(30,27,75,.74));box-shadow:0 0 44px rgba(34,211,238,.15),inset 0 0 70px rgba(168,85,247,.08);isolation:isolate}#hero-shell:before{content:"";position:absolute;inset:-24%;background:radial-gradient(circle at 18% 26%,rgba(34,211,238,.18),transparent 23%),radial-gradient(circle at 76% 18%,rgba(168,85,247,.18),transparent 27%),radial-gradient(circle at 60% 78%,rgba(37,99,235,.14),transparent 25%);filter:blur(36px);animation:floatGlow 9s ease-in-out infinite alternate;z-index:-1}#hero-shell:after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 0%,rgba(255,255,255,.07) 45%,transparent 100%);transform:translateX(-100%);animation:shineHero 7s infinite}@keyframes floatGlow{to{transform:translate3d(16px,-12px,0) scale(1.06)}}@keyframes shineHero{55%,100%{transform:translateX(100%)}}
+.hero-kicker{color:var(--cyan);letter-spacing:.22em;text-transform:uppercase;font-size:12px;font-weight:900}.hero-title{font-size:clamp(36px,7vw,76px);line-height:.92;font-weight:950;color:#fff;text-shadow:0 0 24px rgba(34,211,238,.30);margin:12px 0}.hero-subtitle{max-width:930px;color:#cbd5e1;font-size:18px}.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}.metric-card,.section-frame,.claim-card,.history-card,.admin-card{border:1px solid var(--border);background:linear-gradient(135deg,rgba(15,23,42,.80),rgba(30,41,59,.58));border-radius:22px;box-shadow:var(--shadow-cyan);backdrop-filter:blur(14px);transition:transform .28s ease,box-shadow .28s ease,border-color .28s ease}.metric-card:hover,.section-frame:hover,.claim-card:hover,.history-card:hover,.admin-card:hover{transform:translateY(-4px);border-color:rgba(34,211,238,.40);box-shadow:0 0 38px rgba(34,211,238,.20),0 0 26px rgba(168,85,247,.10)}.metric-card{padding:18px;position:relative;overflow:hidden}.metric-card:after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent,rgba(255,255,255,.06),transparent);transform:translateX(-100%);animation:shine 4.8s infinite}@keyframes shine{100%{transform:translateX(100%)}}.metric-label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.16em}.metric-value{font-size:30px;font-weight:950;color:white;margin-top:8px}.metric-sub{color:#94a3b8;font-size:12px;margin-top:4px}.live-dot{width:10px;height:10px;border-radius:50%;background:#22d3ee;box-shadow:0 0 16px rgba(34,211,238,.85);animation:pulseDot 1.4s infinite;display:inline-block}.live-dot.red{background:#fb7185;box-shadow:0 0 16px rgba(251,113,133,.85)}@keyframes pulseDot{0%,100%{transform:scale(.9);opacity:.78}50%{transform:scale(1.25);opacity:1}}
+.gradio-container textarea,.gradio-container input{background:rgba(2,6,23,.62)!important;color:#f8fafc!important;border:1px solid rgba(34,211,238,.22)!important;border-radius:16px!important}.gr-button-primary{background:linear-gradient(90deg,#0891b2,#7c3aed)!important;border:0!important;box-shadow:0 0 24px rgba(34,211,238,.22)!important}.gradio-container button{transition:transform .22s ease,box-shadow .22s ease!important}.gradio-container button:hover{transform:translateY(-2px)!important;box-shadow:0 0 24px rgba(34,211,238,.18)!important}.results-grid,.history-grid,.admin-shell{display:grid;gap:16px}.admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px}.claim-card,.history-card,.admin-card{padding:18px}.evidence-card{border-color:rgba(168,85,247,.35);box-shadow:0 0 30px rgba(168,85,247,.13)}.claim-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.claim-index{color:#67e8f9;font-family:ui-monospace,monospace;font-weight:950}.topic-pill,.label-pill,.source-chip,.status-pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:7px 11px;font-size:12px;text-decoration:none}.topic-pill{background:rgba(37,99,235,.18);color:#bfdbfe;border:1px solid rgba(59,130,246,.25)}.label-pill{background:rgba(168,85,247,.18);color:#e9d5ff;border:1px solid rgba(168,85,247,.28)}.status-pill{border:1px solid rgba(34,211,238,.24);background:rgba(8,145,178,.12);color:#cffafe}.status-pill.danger{border-color:rgba(251,113,133,.34);background:rgba(127,29,29,.28);color:#fecdd3}.claim-text{font-size:16px;color:#f8fafc;line-height:1.55}.meter{height:8px;border-radius:999px;background:rgba(148,163,184,.17);overflow:hidden;margin:14px 0 8px}.meter span{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#a855f7);border-radius:999px}.shimmer span{background-size:200% 100%;animation:barFlow 2.2s linear infinite}@keyframes barFlow{to{background-position:200% 0}}.meta-line{color:#cbd5e1;font-size:13px;margin-bottom:12px}.sources-row{display:flex;flex-wrap:wrap;gap:8px}.source-chip{color:#cffafe!important;border:1px solid rgba(34,211,238,.24);background:rgba(8,145,178,.12)}.evidence-list{display:grid;gap:10px;margin-top:12px}.evidence-link{display:grid;gap:4px;text-decoration:none!important;color:#e0f2fe!important;border:1px solid rgba(34,211,238,.22);background:rgba(2,6,23,.36);border-radius:16px;padding:12px;transition:transform .22s ease,border-color .22s ease}.evidence-link:hover{transform:translateX(4px);border-color:rgba(34,211,238,.40)}.evidence-link span{color:#fff}.evidence-link small{color:#94a3b8;line-height:1.35}.evidence-link.manual{border-style:dashed;color:#fde68a!important}.caution{margin-top:12px;color:#fbbf24;font-size:12px}.empty-state{padding:24px;color:#cbd5e1}.footer-note,.history-card span,.history-card p{color:#94a3b8;font-size:13px}.archive-head{border:1px solid rgba(34,211,238,.22);border-radius:18px;padding:14px;margin-bottom:14px;background:rgba(15,23,42,.55);display:grid;gap:4px}.archive-head span{color:#94a3b8}.timeline{display:grid;gap:12px}.timeline-item{border-left:2px solid rgba(34,211,238,.30);padding-left:14px;color:#cbd5e1;position:relative}.timeline-item:before{content:"";position:absolute;left:-6px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 14px rgba(34,211,238,.60)}.status-row{display:flex;flex-wrap:wrap;gap:10px}.fade-in-up{opacity:0;transform:translateY(18px);animation:fadeUp .65s ease forwards}@keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+"""
+
+HEAD = """
+<script>
+function claimRadarBoot(){
+  const reveal = document.querySelectorAll('.claim-card,.history-card,.admin-card,.metric-card,.section-frame,.archive-head');
+  reveal.forEach((el,i)=>{ if(!el.dataset.crAnimated){ el.dataset.crAnimated='1'; el.classList.add('fade-in-up'); el.style.animationDelay=`${Math.min(i*65,700)}ms`; }});
+  document.querySelectorAll('[data-counter]').forEach((el)=>{ if(el.dataset.counted) return; el.dataset.counted='1'; const target=Number(el.dataset.counter||0); let cur=0; const step=Math.max(1,Math.ceil(target/36)); const tick=()=>{cur+=step; if(cur>=target){el.textContent=target;} else {el.textContent=cur; requestAnimationFrame(tick);}}; tick(); });
+}
+window.addEventListener('load',()=>setTimeout(claimRadarBoot,250));
+window.addEventListener('DOMContentLoaded',()=>{ const obs=new MutationObserver(()=>setTimeout(claimRadarBoot,120)); obs.observe(document.body,{childList:true,subtree:true}); });
+</script>
 """
 
 HERO = f"""
-<div id="neon-hero"><div class="hero-content">
-<div class="hero-kicker">HF READY · WORD-BY-WORD REALTIME · BULGARIA · v{APP_VERSION}</div>
-<div class="hero-title">ClaimRadar BG</div>
-<div class="hero-subtitle">Финална Hugging Face версия: Gradio приложение + WebSocket realtime backend на един и същ Space. Extension-ът може директно да използва <b>wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime</b>.</div>
-<div class="stat-row"><span class="stat-chip">Gradio App</span><span class="stat-chip">/ws/realtime</span><span class="stat-chip">Word stream</span><span class="stat-chip">Claim cards</span><span class="stat-chip">SRT</span><span class="stat-chip">Public archive</span></div>
-</div></div>
+<div id="hero-shell">
+  <div class="hero-kicker">CLAIMRADAR BG · ANIMATED CONTROL CENTER · {APP_VERSION}</div>
+  <div class="hero-title">Realtime Fact Intelligence</div>
+  <div class="hero-subtitle">Футуристичен интерфейс за откриване, първична проверка, архивиране и realtime проследяване на публични твърдения в България.</div>
+  <div class="metric-grid" style="margin-top:24px;">
+    <div class="metric-card"><div class="metric-label">Realtime Mode</div><div class="metric-value"><span class="live-dot"></span> Live</div><div class="metric-sub">wss endpoint ready</div></div>
+    <div class="metric-card"><div class="metric-label">WebSocket</div><div class="metric-value">/ws/realtime</div><div class="metric-sub">extension bridge</div></div>
+    <div class="metric-card"><div class="metric-label">Public Archive</div><div class="metric-value">Share ID</div><div class="metric-sub">JSONL storage</div></div>
+    <div class="metric-card"><div class="metric-label">System Status</div><div class="metric-value">Ready</div><div class="metric-sub">HF deployment</div></div>
+  </div>
+</div>
 """
 
-with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral_hue="slate"), css=CSS) as demo:
+with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral_hue="slate"), css=CSS, head=HEAD) as demo:
     gr.HTML(HERO)
     gr.Markdown(f"<p class='footer-note'>{DISCLAIMER}</p>")
 
@@ -670,24 +690,18 @@ with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral
         save_btn.click(save_public_check, [title, text, mode], [share_id, status])
 
     with gr.Tab("🔴 Word realtime"):
-        gr.Markdown(f"""
-### Готово за extension след качване в Hugging Face
-
-WebSocket endpoint:
-
-```text
-wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime
-```
-
-Health check:
-
-```text
-{PUBLIC_BASE_URL}/health
-```
-
-Инсталация: Chrome/Edge → Developer mode → Load unpacked → избери папката `extension` → popup → backend URL → `wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime` → отвори YouTube/live → **Realtime**.
-
-На free CPU Space първото стартиране и Whisper моделът може да са бавни. За ниска латентност използвай GPU Space или VPS.
+        gr.HTML(f"""
+<div class="section-frame reveal-card" style="padding:24px;">
+  <div class="status-pill"><span class="live-dot"></span> Realtime endpoint ready</div>
+  <h2>Extension WebSocket</h2>
+  <code>wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime</code>
+  <p class="meta-line">Health check: <code>{PUBLIC_BASE_URL}/health</code></p>
+  <div class="metric-grid" style="margin-top:18px;">
+    <div class="metric-card"><div class="metric-label">Chunk</div><div class="metric-value">1400ms</div></div>
+    <div class="metric-card"><div class="metric-label">Language</div><div class="metric-value">BG</div></div>
+    <div class="metric-card"><div class="metric-label">Mode</div><div class="metric-value">Word diff</div></div>
+  </div>
+</div>
 """)
 
     with gr.Tab("🎙️ Аудио/видео"):
@@ -742,7 +756,7 @@ Health check:
         send.click(save_feedback, [name, email, kind, comment], feedback_status)
 
     with gr.Tab("🛡️ Admin"):
-        gr.Markdown("Задай `ADMIN_KEY` в Hugging Face Space Variables, за да отключиш админ панела.")
+        gr.HTML("<div class='section-frame reveal-card' style='padding:18px;'><span class='status-pill'><span class='live-dot'></span> Animated Admin Control Center</span></div>")
         key = gr.Textbox(label="Admin key", type="password")
         admin_btn = gr.Button("Отвори admin панел", variant="primary")
         admin_html = gr.HTML(label="Admin")
@@ -751,27 +765,12 @@ Health check:
     gr.Markdown(f"---\n{DISCLAIMER}")
 
 fastapi_app = FastAPI(title=APP_TITLE, version=APP_VERSION)
-fastapi_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+fastapi_app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 
 @fastapi_app.get("/health")
 def health():
-    return JSONResponse({
-        "ok": True,
-        "version": APP_VERSION,
-        "model": MODEL_SIZE,
-        "device": DEVICE,
-        "compute_type": COMPUTE_TYPE,
-        "language": LANGUAGE,
-        "realtime_endpoint": "/ws/realtime",
-        "public_realtime_url": PUBLIC_BASE_URL.replace("https://", "wss://").replace("http://", "ws://") + "/ws/realtime",
-    })
+    return JSONResponse({"ok": True, "version": APP_VERSION, "model": MODEL_SIZE, "device": DEVICE, "compute_type": COMPUTE_TYPE, "language": LANGUAGE, "realtime_endpoint": "/ws/realtime", "public_realtime_url": PUBLIC_BASE_URL.replace("https://", "wss://").replace("http://", "ws://") + "/ws/realtime"})
 
 
 @fastapi_app.websocket("/ws/realtime")
