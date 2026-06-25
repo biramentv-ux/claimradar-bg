@@ -36,12 +36,11 @@
     const resultsEl = root.querySelector('.cr-results');
     let wordStream = [];
 
-    function setStatus(text) {
-      if (statusEl) statusEl.textContent = text;
-    }
+    function setStatus(text) { if (statusEl) statusEl.textContent = text; }
+    function safe(text) { return String(text || '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch])); }
 
-    function safe(text) {
-      return String(text || '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
+    async function saveHistory(kind, text, claims = []) {
+      try { await chrome.runtime.sendMessage({ type: 'CR_ADD_HISTORY', item: { kind, url: location.href, title: document.title, text, claims: claims.slice(0, 5) } }); } catch (_) {}
     }
 
     function renderWords(transcript, words, newWords) {
@@ -70,7 +69,7 @@
         return `<div class="cr-card"><div class="cr-top"><span class="cr-pill">LIVE #${String(i + 1).padStart(2, '0')}</span><span class="cr-pill">${safe(item.topic || 'друго')}</span><span class="cr-pill v">${safe(item.label || 'за проверка')}</span></div><div class="cr-claim">${safe(item.claim || '')}</div><div class="cr-meter"><span style="width:${score}%"></span></div><div class="cr-status">${score}% · ${safe(item.reason || 'realtime speech-to-text')}</div><div class="cr-links">${links}</div></div>`;
       }).join('');
       resultsEl.innerHTML = wordHtml + (claimHtml || '<div class="cr-card"><div class="cr-claim">Транскрипцията върви. Чакам достатъчно фактическо твърдение...</div></div>');
-      root.scrollTop = root.scrollHeight;
+      saveHistory('audio realtime', transcript.slice(0, 1200), claims);
     }
 
     const extraStyle = document.createElement('style');
@@ -81,6 +80,10 @@
       wordStream = [];
       setStatus('Стартирам realtime tab audio capture...');
       const config = await chrome.runtime.sendMessage({ type: 'CR_GET_CONFIG' });
+      if (config.enabled === false) {
+        setStatus('Overlay е изключен от popup настройките.');
+        return;
+      }
       const response = await chrome.runtime.sendMessage({
         type: 'CR_START_TAB_AUDIO',
         backendUrl: config.backendUrl,
@@ -97,11 +100,11 @@
 
     settings.addEventListener('click', async () => {
       const current = await chrome.runtime.sendMessage({ type: 'CR_GET_CONFIG' });
-      const backendUrl = prompt('WebSocket backend URL:', current.backendUrl || 'ws://127.0.0.1:7861/ws/realtime');
+      const backendUrl = prompt('WebSocket backend URL:', current.backendUrl || 'wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime');
       if (!backendUrl) return;
-      const chunkMsRaw = prompt('Chunk milliseconds:', String(current.chunkMs || 1200));
-      const chunkMs = Math.max(600, Math.min(8000, Number(chunkMsRaw || 1200)));
-      await chrome.runtime.sendMessage({ type: 'CR_SAVE_CONFIG', config: { backendUrl, chunkMs, realtimeMode: true } });
+      const chunkMsRaw = prompt('Chunk milliseconds:', String(current.chunkMs || 1400));
+      const chunkMs = Math.max(600, Math.min(8000, Number(chunkMsRaw || 1400)));
+      await chrome.runtime.sendMessage({ type: 'CR_SAVE_CONFIG', config: { backendUrl, chunkMs, realtimeMode: true, inputMode: 'audio' } });
       setStatus('Realtime backend записан: ' + backendUrl);
     });
 
