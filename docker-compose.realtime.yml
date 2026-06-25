@@ -1,0 +1,17 @@
+services:
+  claimradar-realtime:
+    build:
+      context: .
+      dockerfile: Dockerfile.realtime
+    container_name: claimradar-realtime
+    ports:
+      - "7861:7861"
+    environment:
+      WHISPER_MODEL_SIZE: small
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      STREAM_PORT: 7861
+      REALTIME_INTERVAL: 1.6
+      STREAM_MAX_BUFFER_MB: 80
+      ROLLING_WINDOW_MB: 18
+    restart: unless-stopped
