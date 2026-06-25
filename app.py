@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from faster_whisper import WhisperModel
 
 APP_TITLE = "ClaimRadar BG"
-APP_VERSION = "2.1-animated-redesign"
+APP_VERSION = "2.1.1-stable-docker"
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://dyrakarmy-claimradar-bg.hf.space")
 DISCLAIMER = "Тестов инструмент: резултатите са ориентир за проверка, не окончателна правна, политическа или журналистическа оценка."
 
@@ -29,7 +29,7 @@ COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 LANGUAGE = os.getenv("STREAM_LANGUAGE", "bg")
 MAX_MEDIA_MB = int(os.getenv("MAX_MEDIA_MB", "80"))
 SEARCH_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT", "8"))
-REALTIME_INTERVAL = float(os.getenv("REALTIME_INTERVAL", "2.2"))
+REALTIME_INTERVAL = float(os.getenv("REALTIME_INTERVAL", "2.5"))
 ROLLING_WINDOW_MB = int(os.getenv("ROLLING_WINDOW_MB", "12"))
 STREAM_MAX_BUFFER_MB = int(os.getenv("STREAM_MAX_BUFFER_MB", "60"))
 ADMIN_KEY = os.getenv("ADMIN_KEY", "")
@@ -133,7 +133,7 @@ def read_jsonl(path: Path, limit=200):
             try:
                 rows.append(json.loads(line))
             except json.JSONDecodeError:
-                continue
+                pass
     return list(reversed(rows[-limit:]))
 
 
@@ -146,9 +146,12 @@ def get_model() -> WhisperModel:
 
 def topic_for(sentence: str) -> str:
     text = sentence.lower()
-    scores = {topic: sum(1 for word in words if word in text) for topic, words in KEYWORDS.items()}
-    topic, score = max(scores.items(), key=lambda item: item[1])
-    return topic if score else "друго"
+    best_topic, best_score = "друго", 0
+    for topic, words in KEYWORDS.items():
+        score = sum(1 for word in words if word in text)
+        if score > best_score:
+            best_topic, best_score = topic, score
+    return best_topic
 
 
 def source_links(topic: str):
@@ -232,7 +235,7 @@ def build_search_url(query):
 
 def search_web(query, limit=3):
     search_url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
-    request = urllib.request.Request(search_url, headers={"User-Agent": "Mozilla/5.0 ClaimRadarBG/2.1"})
+    request = urllib.request.Request(search_url, headers={"User-Agent": "Mozilla/5.0 ClaimRadarBG/2.1.1"})
     try:
         with urllib.request.urlopen(request, timeout=SEARCH_TIMEOUT) as response:
             html = response.read().decode("utf-8", errors="ignore")
@@ -289,12 +292,12 @@ def evaluate_evidence(evidence):
     real = [item for item in evidence if not item.get("manual")]
     text = " ".join((item.get("title", "") + " " + item.get("snippet", "")).lower() for item in real)
     if not real:
-        return "нужна е ръчна проверка", 28, "Не са намерени автоматични резултати; показани са линкове за ръчно търсене."
+        return "нужна е ръчна проверка", 28, "Не са намерени автоматични резултати."
     if any(word in text for word in NEGATIVE_EVIDENCE_WORDS):
         return "има сигнал за спорно/подвеждащо твърдение", 62, "Намерени са резултати с думи като невярно/подвеждащо/опровергано."
     if len(real) >= 3 and any(word in text for word in POSITIVE_EVIDENCE_WORDS):
         return "има намерени релевантни източници", 70, "Намерени са няколко резултата от надеждни/официални източници."
-    return "има първични следи за проверка", 52, "Намерени са резултати, но финалната оценка изисква човешко сравнение с данните."
+    return "има първични следи за проверка", 52, "Намерени са резултати, но финалната оценка изисква човешко сравнение."
 
 
 def render_results(rows):
@@ -305,7 +308,7 @@ def render_results(rows):
     for idx, item in enumerate(rows, 1):
         source_html = "".join([f'<a class="source-chip" href="{escape(src["url"])}" target="_blank">{escape(src["name"])}</a>' for src in item["sources"]])
         confidence = int(item["confidence"])
-        cards.append(f"""
+        cards.append(f'''
 <div class="claim-card reveal-card">
   <div class="claim-top"><span class="claim-index">#{idx:02}</span><span class="topic-pill">{escape(item["topic"])}</span><span class="label-pill">{escape(item["label"])}</span></div>
   <div class="claim-text">{escape(item["claim"])}</div>
@@ -314,7 +317,7 @@ def render_results(rows):
   <div class="sources-row">{source_html}</div>
   <div class="caution">Провери ръчно преди публикуване.</div>
 </div>
-""")
+''')
         copy_lines += [f"{idx}. [{item['label']}] [{item['topic']}] {item['claim']}", f"Увереност: {confidence}% | Причина: {item['reason']}", "Източници: " + ", ".join([f"{s['name']} - {s['url']}" for s in item["sources"]]), ""]
     cards.append("</div>")
     return "\n".join(cards), "\n".join(copy_lines)
@@ -333,8 +336,8 @@ def render_real_check(rows):
         for ev_idx, ev in enumerate(evidence, 1):
             cls = "evidence-link manual" if ev.get("manual") else "evidence-link"
             ev_html.append(f'<a class="{cls}" href="{escape(ev["url"])}" target="_blank"><b>{ev_idx}. {escape(ev.get("source", "източник"))}</b><span>{escape(ev.get("title", "линк"))}</span><small>{escape(ev.get("snippet", ""))}</small></a>')
-            ev_copy.append(f'{ev_idx}. {ev.get("source", "източник")}: {ev.get("title", "линк")} — {ev.get("url", "")}' )
-        cards.append(f"""
+            ev_copy.append(f'{ev_idx}. {ev.get("source", "източник")}: {ev.get("title", "линк")} — {ev.get("url", "")}')
+        cards.append(f'''
 <div class="claim-card evidence-card reveal-card">
   <div class="claim-top"><span class="claim-index">LIVE #{idx:02}</span><span class="topic-pill">{escape(item["topic"])}</span><span class="label-pill">{escape(verdict)}</span></div>
   <div class="claim-text">{escape(item["claim"])}</div>
@@ -343,7 +346,7 @@ def render_real_check(rows):
   <div class="evidence-list">{"".join(ev_html)}</div>
   <div class="caution">Това не е финална присъда. Отвори линковете и сравни твърдението с първичните данни.</div>
 </div>
-""")
+''')
         copy_lines += [f"{idx}. {item['claim']}", f"Оценка: {verdict} | {explanation}", *ev_copy, ""]
         saved_items.append({**item, "verdict": verdict, "verdict_score": verdict_score, "explanation": explanation, "evidence": evidence})
     cards.append("</div>")
@@ -387,7 +390,7 @@ def load_public_check(check_id):
         if rec.get("id") == check_id:
             header = f'<div class="archive-head reveal-card"><b>{escape(rec.get("title", "Проверка"))}</b><span>ID: {escape(check_id)} · {escape(rec.get("created_at", ""))} · {escape(rec.get("mode", ""))}</span></div>'
             return header + rec.get("html", ""), rec.get("copy_text", "")
-    return '<div class="empty-state section-frame">Не е намерена проверка с това ID. На free Space локалният архив може да се изтрие при рестарт.</div>', ""
+    return '<div class="empty-state section-frame">Не е намерена проверка с това ID.</div>', ""
 
 
 def list_public_checks():
@@ -396,14 +399,7 @@ def list_public_checks():
         return '<div class="empty-state section-frame">Все още няма запазени публични проверки.</div>'
     cards = ['<div class="history-grid">']
     for rec in rows:
-        cards.append(f"""
-<div class="history-card reveal-card">
-  <b>{escape(rec.get("title", "Проверка"))}</b>
-  <span>{escape(rec.get("created_at", ""))} · {escape(rec.get("mode", ""))}</span>
-  <code>{escape(rec.get("id", ""))}</code>
-  <p>{escape(rec.get("text_preview", ""))}</p>
-</div>
-""")
+        cards.append(f'<div class="history-card reveal-card"><b>{escape(rec.get("title", "Проверка"))}</b><span>{escape(rec.get("created_at", ""))} · {escape(rec.get("mode", ""))}</span><code>{escape(rec.get("id", ""))}</code><p>{escape(rec.get("text_preview", ""))}</p></div>')
     cards.append("</div>")
     return "\n".join(cards)
 
@@ -449,9 +445,7 @@ def transcribe_file(file_path):
     segments, _ = get_model().transcribe(path, language=LANGUAGE, beam_size=1, vad_filter=True)
     segments = list(segments)
     transcript = " ".join(seg.text.strip() for seg in segments).strip()
-    srt_blocks = []
-    for i, seg in enumerate(segments, 1):
-        srt_blocks.append(f"{i}\n{ts(seg.start)} --> {ts(seg.end)}\n{seg.text.strip()}\n")
+    srt_blocks = [f"{i}\n{ts(seg.start)} --> {ts(seg.end)}\n{seg.text.strip()}\n" for i, seg in enumerate(segments, 1)]
     out = tempfile.NamedTemporaryFile(delete=False, suffix=".srt", mode="w", encoding="utf-8")
     out.write("\n".join(srt_blocks))
     out.close()
@@ -483,44 +477,22 @@ def admin_panel(key):
         return '<div class="section-frame admin-card reveal-card"><div class="status-pill"><span class="live-dot"></span> ADMIN_KEY не е зададен в Space Variables. Админ панелът е заключен.</div></div>'
     checks = read_jsonl(CHECKS_FILE, limit=100)
     feedback = read_jsonl(FEEDBACK_FILE, limit=100)
-    latest_checks = checks[:12]
-    latest_feedback = feedback[:14]
     html = ["<div class='admin-shell'>"]
     html.append(f"""
 <div class="metric-grid">
-  <div class="metric-card reveal-card"><div class="metric-label">Saved Checks</div><div class="metric-value" data-counter="{len(checks)}">0</div><div class="metric-sub">локален JSONL архив</div></div>
-  <div class="metric-card reveal-card"><div class="metric-label">Feedback Items</div><div class="metric-value" data-counter="{len(feedback)}">0</div><div class="metric-sub">потребителски сигнали</div></div>
+  <div class="metric-card reveal-card"><div class="metric-label">Saved Checks</div><div class="metric-value">{len(checks)}</div><div class="metric-sub">локален JSONL архив</div></div>
+  <div class="metric-card reveal-card"><div class="metric-label">Feedback Items</div><div class="metric-value">{len(feedback)}</div><div class="metric-sub">потребителски сигнали</div></div>
   <div class="metric-card reveal-card"><div class="metric-label">Realtime</div><div class="metric-value"><span class="live-dot"></span> Active</div><div class="metric-sub">/ws/realtime</div></div>
   <div class="metric-card reveal-card"><div class="metric-label">System Mode</div><div class="metric-value">HF Ready</div><div class="metric-sub">{escape(APP_VERSION)}</div></div>
 </div>
 """)
-    html.append("<div class='admin-grid'>")
-    html.append("<div class='admin-card reveal-card'><h3>Последни проверки</h3><div class='timeline'>")
-    if not latest_checks:
-        html.append("<div class='timeline-item'>Няма запазени проверки.</div>")
-    for rec in latest_checks:
-        html.append(f"""
-<div class="timeline-item">
-  <b>{escape(rec.get('title','Проверка'))}</b><br>
-  <small>{escape(rec.get('id',''))} · {escape(rec.get('created_at',''))} · {escape(rec.get('mode',''))}</small><br>
-  <span>{escape(rec.get('text_preview','')[:180])}</span>
-</div>
-""")
-    html.append("</div></div>")
-    html.append("<div class='admin-card reveal-card'><h3>Feedback поток</h3><div class='timeline'>")
-    if not latest_feedback:
-        html.append("<div class='timeline-item'>Няма обратна връзка.</div>")
-    for fb in latest_feedback:
-        html.append(f"""
-<div class="timeline-item">
-  <b>{escape(fb.get('kind','друго'))}</b><br>
-  <small>{escape(fb.get('created_at',''))} · {escape(fb.get('email',''))}</small><br>
-  <span>{escape(fb.get('comment','')[:220])}</span>
-</div>
-""")
-    html.append("</div></div></div>")
-    html.append("<div class='admin-card reveal-card'><h3>System Health</h3><div class='status-row'><span class='status-pill'><span class='live-dot'></span> WebSocket: /ws/realtime</span><span class='status-pill'>Model: " + escape(MODEL_SIZE) + "</span><span class='status-pill'>Device: " + escape(DEVICE) + "</span><span class='status-pill'>Compute: " + escape(COMPUTE_TYPE) + "</span></div></div>")
-    html.append("</div>")
+    html.append("<div class='admin-grid'><div class='admin-card reveal-card'><h3>Последни проверки</h3><div class='timeline'>")
+    for rec in checks[:12] or [{"title": "Няма запазени проверки", "created_at": "", "id": ""}]:
+        html.append(f'<div class="timeline-item"><b>{escape(rec.get("title", "Проверка"))}</b><br><small>{escape(rec.get("id", ""))} · {escape(rec.get("created_at", ""))}</small></div>')
+    html.append("</div></div><div class='admin-card reveal-card'><h3>Feedback поток</h3><div class='timeline'>")
+    for fb in feedback[:12] or [{"kind": "Няма feedback", "created_at": "", "comment": ""}]:
+        html.append(f'<div class="timeline-item"><b>{escape(fb.get("kind", "друго"))}</b><br><small>{escape(fb.get("created_at", ""))}</small><br><span>{escape(fb.get("comment", ""))}</span></div>')
+    html.append("</div></div></div></div>")
     return "".join(html)
 
 
@@ -632,22 +604,21 @@ async def receive_realtime(websocket: WebSocket, realtime=True):
 
 
 CSS = """
-:root{--bg:#020617;--panel:rgba(15,23,42,.60);--panel2:rgba(30,41,59,.50);--cyan:#22d3ee;--purple:#a855f7;--blue:#2563eb;--text:#f8fafc;--muted:#94a3b8;--border:rgba(34,211,238,.20);--shadow-cyan:0 0 28px rgba(34,211,238,.13);--shadow-purple:0 0 28px rgba(168,85,247,.13)}
-html,body,.gradio-container{background:radial-gradient(circle at 10% 10%,rgba(34,211,238,.16),transparent 23%),radial-gradient(circle at 86% 12%,rgba(168,85,247,.20),transparent 25%),radial-gradient(circle at 50% 100%,rgba(37,99,235,.14),transparent 28%),linear-gradient(180deg,#020617 0%,#071126 100%)!important;color:var(--text)!important}.gradio-container{max-width:1280px!important;margin:auto!important;position:relative;overflow:hidden}.gradio-container:before{content:"";position:fixed;inset:0;background-image:linear-gradient(rgba(34,211,238,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.05) 1px,transparent 1px);background-size:36px 36px;pointer-events:none;animation:gridMove 18s linear infinite;opacity:.38}.gradio-container:after{content:"";position:fixed;width:420px;height:420px;right:-130px;top:18%;background:radial-gradient(circle,rgba(168,85,247,.20),transparent 64%);filter:blur(18px);pointer-events:none;animation:orbFloat 12s ease-in-out infinite alternate}@keyframes gridMove{to{transform:translateY(36px)}}@keyframes orbFloat{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(-45px,35px,0) scale(1.15)}}
-#hero-shell{position:relative;border:1px solid rgba(34,211,238,.25);border-radius:30px;overflow:hidden;padding:34px;background:linear-gradient(135deg,rgba(2,6,23,.94),rgba(30,27,75,.74));box-shadow:0 0 44px rgba(34,211,238,.15),inset 0 0 70px rgba(168,85,247,.08);isolation:isolate}#hero-shell:before{content:"";position:absolute;inset:-24%;background:radial-gradient(circle at 18% 26%,rgba(34,211,238,.18),transparent 23%),radial-gradient(circle at 76% 18%,rgba(168,85,247,.18),transparent 27%),radial-gradient(circle at 60% 78%,rgba(37,99,235,.14),transparent 25%);filter:blur(36px);animation:floatGlow 9s ease-in-out infinite alternate;z-index:-1}#hero-shell:after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 0%,rgba(255,255,255,.07) 45%,transparent 100%);transform:translateX(-100%);animation:shineHero 7s infinite}@keyframes floatGlow{to{transform:translate3d(16px,-12px,0) scale(1.06)}}@keyframes shineHero{55%,100%{transform:translateX(100%)}}
-.hero-kicker{color:var(--cyan);letter-spacing:.22em;text-transform:uppercase;font-size:12px;font-weight:900}.hero-title{font-size:clamp(36px,7vw,76px);line-height:.92;font-weight:950;color:#fff;text-shadow:0 0 24px rgba(34,211,238,.30);margin:12px 0}.hero-subtitle{max-width:930px;color:#cbd5e1;font-size:18px}.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}.metric-card,.section-frame,.claim-card,.history-card,.admin-card{border:1px solid var(--border);background:linear-gradient(135deg,rgba(15,23,42,.80),rgba(30,41,59,.58));border-radius:22px;box-shadow:var(--shadow-cyan);backdrop-filter:blur(14px);transition:transform .28s ease,box-shadow .28s ease,border-color .28s ease}.metric-card:hover,.section-frame:hover,.claim-card:hover,.history-card:hover,.admin-card:hover{transform:translateY(-4px);border-color:rgba(34,211,238,.40);box-shadow:0 0 38px rgba(34,211,238,.20),0 0 26px rgba(168,85,247,.10)}.metric-card{padding:18px;position:relative;overflow:hidden}.metric-card:after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent,rgba(255,255,255,.06),transparent);transform:translateX(-100%);animation:shine 4.8s infinite}@keyframes shine{100%{transform:translateX(100%)}}.metric-label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.16em}.metric-value{font-size:30px;font-weight:950;color:white;margin-top:8px}.metric-sub{color:#94a3b8;font-size:12px;margin-top:4px}.live-dot{width:10px;height:10px;border-radius:50%;background:#22d3ee;box-shadow:0 0 16px rgba(34,211,238,.85);animation:pulseDot 1.4s infinite;display:inline-block}.live-dot.red{background:#fb7185;box-shadow:0 0 16px rgba(251,113,133,.85)}@keyframes pulseDot{0%,100%{transform:scale(.9);opacity:.78}50%{transform:scale(1.25);opacity:1}}
-.gradio-container textarea,.gradio-container input{background:rgba(2,6,23,.62)!important;color:#f8fafc!important;border:1px solid rgba(34,211,238,.22)!important;border-radius:16px!important}.gr-button-primary{background:linear-gradient(90deg,#0891b2,#7c3aed)!important;border:0!important;box-shadow:0 0 24px rgba(34,211,238,.22)!important}.gradio-container button{transition:transform .22s ease,box-shadow .22s ease!important}.gradio-container button:hover{transform:translateY(-2px)!important;box-shadow:0 0 24px rgba(34,211,238,.18)!important}.results-grid,.history-grid,.admin-shell{display:grid;gap:16px}.admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px}.claim-card,.history-card,.admin-card{padding:18px}.evidence-card{border-color:rgba(168,85,247,.35);box-shadow:0 0 30px rgba(168,85,247,.13)}.claim-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.claim-index{color:#67e8f9;font-family:ui-monospace,monospace;font-weight:950}.topic-pill,.label-pill,.source-chip,.status-pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:7px 11px;font-size:12px;text-decoration:none}.topic-pill{background:rgba(37,99,235,.18);color:#bfdbfe;border:1px solid rgba(59,130,246,.25)}.label-pill{background:rgba(168,85,247,.18);color:#e9d5ff;border:1px solid rgba(168,85,247,.28)}.status-pill{border:1px solid rgba(34,211,238,.24);background:rgba(8,145,178,.12);color:#cffafe}.status-pill.danger{border-color:rgba(251,113,133,.34);background:rgba(127,29,29,.28);color:#fecdd3}.claim-text{font-size:16px;color:#f8fafc;line-height:1.55}.meter{height:8px;border-radius:999px;background:rgba(148,163,184,.17);overflow:hidden;margin:14px 0 8px}.meter span{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#a855f7);border-radius:999px}.shimmer span{background-size:200% 100%;animation:barFlow 2.2s linear infinite}@keyframes barFlow{to{background-position:200% 0}}.meta-line{color:#cbd5e1;font-size:13px;margin-bottom:12px}.sources-row{display:flex;flex-wrap:wrap;gap:8px}.source-chip{color:#cffafe!important;border:1px solid rgba(34,211,238,.24);background:rgba(8,145,178,.12)}.evidence-list{display:grid;gap:10px;margin-top:12px}.evidence-link{display:grid;gap:4px;text-decoration:none!important;color:#e0f2fe!important;border:1px solid rgba(34,211,238,.22);background:rgba(2,6,23,.36);border-radius:16px;padding:12px;transition:transform .22s ease,border-color .22s ease}.evidence-link:hover{transform:translateX(4px);border-color:rgba(34,211,238,.40)}.evidence-link span{color:#fff}.evidence-link small{color:#94a3b8;line-height:1.35}.evidence-link.manual{border-style:dashed;color:#fde68a!important}.caution{margin-top:12px;color:#fbbf24;font-size:12px}.empty-state{padding:24px;color:#cbd5e1}.footer-note,.history-card span,.history-card p{color:#94a3b8;font-size:13px}.archive-head{border:1px solid rgba(34,211,238,.22);border-radius:18px;padding:14px;margin-bottom:14px;background:rgba(15,23,42,.55);display:grid;gap:4px}.archive-head span{color:#94a3b8}.timeline{display:grid;gap:12px}.timeline-item{border-left:2px solid rgba(34,211,238,.30);padding-left:14px;color:#cbd5e1;position:relative}.timeline-item:before{content:"";position:absolute;left:-6px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 14px rgba(34,211,238,.60)}.status-row{display:flex;flex-wrap:wrap;gap:10px}.fade-in-up{opacity:0;transform:translateY(18px);animation:fadeUp .65s ease forwards}@keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+:root{--bg:#020617;--cyan:#22d3ee;--purple:#a855f7;--blue:#2563eb;--text:#f8fafc;--muted:#94a3b8;--border:rgba(34,211,238,.20)}
+html,body,.gradio-container{background:radial-gradient(circle at 10% 10%,rgba(34,211,238,.16),transparent 23%),radial-gradient(circle at 86% 12%,rgba(168,85,247,.20),transparent 25%),linear-gradient(180deg,#020617 0%,#071126 100%)!important;color:var(--text)!important}.gradio-container{max-width:1280px!important;margin:auto!important}.gradio-container:before{content:"";position:fixed;inset:0;background-image:linear-gradient(rgba(34,211,238,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.05) 1px,transparent 1px);background-size:36px 36px;pointer-events:none;animation:gridMove 18s linear infinite;opacity:.38}@keyframes gridMove{to{transform:translateY(36px)}}
+#hero-shell{position:relative;border:1px solid rgba(34,211,238,.25);border-radius:30px;overflow:hidden;padding:34px;background:linear-gradient(135deg,rgba(2,6,23,.94),rgba(30,27,75,.74));box-shadow:0 0 44px rgba(34,211,238,.15),inset 0 0 70px rgba(168,85,247,.08)}.hero-kicker{color:var(--cyan);letter-spacing:.22em;text-transform:uppercase;font-size:12px;font-weight:900}.hero-title{font-size:clamp(36px,7vw,76px);line-height:.92;font-weight:950;color:#fff;text-shadow:0 0 24px rgba(34,211,238,.30);margin:12px 0}.hero-subtitle{max-width:930px;color:#cbd5e1;font-size:18px}.metric-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}.metric-card,.section-frame,.claim-card,.history-card,.admin-card{border:1px solid var(--border);background:linear-gradient(135deg,rgba(15,23,42,.80),rgba(30,41,59,.58));border-radius:22px;box-shadow:0 0 28px rgba(34,211,238,.13);backdrop-filter:blur(14px);transition:transform .28s ease,box-shadow .28s ease,border-color .28s ease}.metric-card:hover,.section-frame:hover,.claim-card:hover,.history-card:hover,.admin-card:hover{transform:translateY(-4px);border-color:rgba(34,211,238,.40);box-shadow:0 0 38px rgba(34,211,238,.20)}.metric-card,.claim-card,.history-card,.admin-card{padding:18px}.metric-label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.16em}.metric-value{font-size:30px;font-weight:950;color:white;margin-top:8px}.metric-sub{color:#94a3b8;font-size:12px;margin-top:4px}.live-dot{width:10px;height:10px;border-radius:50%;background:#22d3ee;box-shadow:0 0 16px rgba(34,211,238,.85);animation:pulseDot 1.4s infinite;display:inline-block}.live-dot.red{background:#fb7185}@keyframes pulseDot{0%,100%{transform:scale(.9);opacity:.78}50%{transform:scale(1.25);opacity:1}}
+.gradio-container textarea,.gradio-container input{background:rgba(2,6,23,.62)!important;color:#f8fafc!important;border:1px solid rgba(34,211,238,.22)!important;border-radius:16px!important}.gr-button-primary{background:linear-gradient(90deg,#0891b2,#7c3aed)!important;border:0!important;box-shadow:0 0 24px rgba(34,211,238,.22)!important}.results-grid,.history-grid,.admin-shell{display:grid;gap:16px}.admin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px}.claim-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.claim-index{color:#67e8f9;font-family:ui-monospace,monospace;font-weight:950}.topic-pill,.label-pill,.source-chip,.status-pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:7px 11px;font-size:12px;text-decoration:none}.topic-pill{background:rgba(37,99,235,.18);color:#bfdbfe;border:1px solid rgba(59,130,246,.25)}.label-pill{background:rgba(168,85,247,.18);color:#e9d5ff;border:1px solid rgba(168,85,247,.28)}.status-pill{border:1px solid rgba(34,211,238,.24);background:rgba(8,145,178,.12);color:#cffafe}.status-pill.danger{border-color:rgba(251,113,133,.34);background:rgba(127,29,29,.28);color:#fecdd3}.claim-text{font-size:16px;color:#f8fafc;line-height:1.55}.meter{height:8px;border-radius:999px;background:rgba(148,163,184,.17);overflow:hidden;margin:14px 0 8px}.meter span{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#a855f7);border-radius:999px}.meta-line{color:#cbd5e1;font-size:13px;margin-bottom:12px}.sources-row{display:flex;flex-wrap:wrap;gap:8px}.source-chip{color:#cffafe!important;border:1px solid rgba(34,211,238,.24);background:rgba(8,145,178,.12)}.evidence-list{display:grid;gap:10px;margin-top:12px}.evidence-link{display:grid;gap:4px;text-decoration:none!important;color:#e0f2fe!important;border:1px solid rgba(34,211,238,.22);background:rgba(2,6,23,.36);border-radius:16px;padding:12px}.evidence-link span{color:#fff}.evidence-link small{color:#94a3b8;line-height:1.35}.evidence-link.manual{border-style:dashed;color:#fde68a!important}.caution{margin-top:12px;color:#fbbf24;font-size:12px}.empty-state{padding:24px;color:#cbd5e1}.footer-note,.history-card span,.history-card p{color:#94a3b8;font-size:13px}.archive-head{border:1px solid rgba(34,211,238,.22);border-radius:18px;padding:14px;margin-bottom:14px;background:rgba(15,23,42,.55);display:grid;gap:4px}.timeline{display:grid;gap:12px}.timeline-item{border-left:2px solid rgba(34,211,238,.30);padding-left:14px;color:#cbd5e1;position:relative}.timeline-item:before{content:"";position:absolute;left:-6px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 14px rgba(34,211,238,.60)}
 """
 
-HEAD = """
+JS_HTML = """
 <script>
 function claimRadarBoot(){
-  const reveal = document.querySelectorAll('.claim-card,.history-card,.admin-card,.metric-card,.section-frame,.archive-head');
-  reveal.forEach((el,i)=>{ if(!el.dataset.crAnimated){ el.dataset.crAnimated='1'; el.classList.add('fade-in-up'); el.style.animationDelay=`${Math.min(i*65,700)}ms`; }});
-  document.querySelectorAll('[data-counter]').forEach((el)=>{ if(el.dataset.counted) return; el.dataset.counted='1'; const target=Number(el.dataset.counter||0); let cur=0; const step=Math.max(1,Math.ceil(target/36)); const tick=()=>{cur+=step; if(cur>=target){el.textContent=target;} else {el.textContent=cur; requestAnimationFrame(tick);}}; tick(); });
+  document.querySelectorAll('.claim-card,.history-card,.admin-card,.metric-card,.section-frame,.archive-head').forEach((el,i)=>{
+    if(!el.dataset.crAnimated){el.dataset.crAnimated='1';el.style.opacity='0';el.style.transform='translateY(18px)';setTimeout(()=>{el.style.transition='opacity .65s ease, transform .65s ease';el.style.opacity='1';el.style.transform='translateY(0)';}, Math.min(i*65,700));}
+  });
 }
 window.addEventListener('load',()=>setTimeout(claimRadarBoot,250));
-window.addEventListener('DOMContentLoaded',()=>{ const obs=new MutationObserver(()=>setTimeout(claimRadarBoot,120)); obs.observe(document.body,{childList:true,subtree:true}); });
+window.addEventListener('DOMContentLoaded',()=>{new MutationObserver(()=>setTimeout(claimRadarBoot,120)).observe(document.body,{childList:true,subtree:true});});
 </script>
 """
 
@@ -665,7 +636,8 @@ HERO = f"""
 </div>
 """
 
-with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral_hue="slate"), css=CSS, head=HEAD) as demo:
+with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral_hue="slate"), css=CSS) as demo:
+    gr.HTML(JS_HTML)
     gr.HTML(HERO)
     gr.Markdown(f"<p class='footer-note'>{DISCLAIMER}</p>")
 
@@ -696,11 +668,6 @@ with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral
   <h2>Extension WebSocket</h2>
   <code>wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime</code>
   <p class="meta-line">Health check: <code>{PUBLIC_BASE_URL}/health</code></p>
-  <div class="metric-grid" style="margin-top:18px;">
-    <div class="metric-card"><div class="metric-label">Chunk</div><div class="metric-value">1400ms</div></div>
-    <div class="metric-card"><div class="metric-label">Language</div><div class="metric-value">BG</div></div>
-    <div class="metric-card"><div class="metric-label">Mode</div><div class="metric-value">Word diff</div></div>
-  </div>
 </div>
 """)
 
@@ -786,4 +753,4 @@ async def ws_transcribe(websocket: WebSocket):
 app = gr.mount_gradio_app(fastapi_app, demo, path="/")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "7860")))
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", os.getenv("APP_PORT", "7860"))))
