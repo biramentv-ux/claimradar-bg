@@ -12,20 +12,20 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="kicker">Word realtime v1.2</div>
+    <div class="kicker">HF ready realtime</div>
     <h1>ClaimRadar BG</h1>
-    <p>Overlay за YouTube/live дебати + tab audio capture към word-by-word realtime backend.</p>
+    <p>Overlay за YouTube/live дебати + tab audio capture към Hugging Face word-by-word realtime backend.</p>
     <div class="grid">
       <button class="btn primary" id="openApp">App</button>
       <button class="btn" id="openYouTube">YouTube</button>
     </div>
     <label>Realtime WebSocket backend</label>
-    <input id="backendUrl" placeholder="ws://127.0.0.1:7861/ws/realtime" />
+    <input id="backendUrl" placeholder="wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime" />
     <label>Audio chunk milliseconds</label>
     <input id="chunkMs" type="number" min="600" max="8000" step="100" />
     <button class="btn" id="saveBackend">Запази realtime backend</button>
     <div class="status" id="status"></div>
-    <p class="note">Стартирай `streaming_server.py`, после отвори YouTube/live страница и натисни „Realtime“ в overlay панела. За най-ниска латентност използвай GPU/VPS.</p>
+    <p class="note">След като Space-ът е Running, отвори YouTube/live страница и натисни „Realtime“ в overlay панела. На free CPU първото пускане може да е бавно.</p>
   </div>
   <script src="popup.js"></script>
 </body>
