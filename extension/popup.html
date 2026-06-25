@@ -5,27 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ClaimRadar BG</title>
   <style>
-    body{width:350px;margin:0;background:#020617;color:#e5e7eb;font-family:Arial,sans-serif}
+    body{width:390px;margin:0;background:#020617;color:#e5e7eb;font-family:Arial,sans-serif}
     .wrap{padding:16px;background:radial-gradient(circle at 20% 0,rgba(34,211,238,.18),transparent 35%),radial-gradient(circle at 90% 20%,rgba(168,85,247,.18),transparent 35%)}
-    h1{font-size:18px;margin:0 0 6px;color:#fff}p{font-size:12px;line-height:1.4;color:#cbd5e1}.kicker{font-size:10px;color:#67e8f9;letter-spacing:.14em;text-transform:uppercase;font-weight:800}.btn{width:100%;border:1px solid rgba(34,211,238,.25);background:rgba(15,23,42,.7);color:#e0f2fe;border-radius:12px;padding:10px;margin-top:8px;cursor:pointer}.btn.primary{border:0;background:linear-gradient(90deg,#0891b2,#7c3aed);color:#fff}.note{font-size:11px;color:#94a3b8;margin-top:12px}label{display:block;font-size:11px;color:#94a3b8;margin-top:10px}input{box-sizing:border-box;width:100%;border:1px solid rgba(34,211,238,.25);background:rgba(2,6,23,.7);color:#e5e7eb;border-radius:10px;padding:8px;margin-top:4px}.status{font-size:11px;color:#67e8f9;margin-top:8px;min-height:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    h1{font-size:18px;margin:0 0 6px;color:#fff}p{font-size:12px;line-height:1.4;color:#cbd5e1}.kicker{font-size:10px;color:#67e8f9;letter-spacing:.14em;text-transform:uppercase;font-weight:800}
+    .btn{width:100%;border:1px solid rgba(34,211,238,.25);background:rgba(15,23,42,.7);color:#e0f2fe;border-radius:12px;padding:10px;margin-top:8px;cursor:pointer}.btn.primary{border:0;background:linear-gradient(90deg,#0891b2,#7c3aed);color:#fff}.btn.danger{border-color:rgba(248,113,113,.45);color:#fecaca}.note{font-size:11px;color:#94a3b8;margin-top:12px}label{display:block;font-size:11px;color:#94a3b8;margin-top:10px}input,select{box-sizing:border-box;width:100%;border:1px solid rgba(34,211,238,.25);background:rgba(2,6,23,.7);color:#e5e7eb;border-radius:10px;padding:8px;margin-top:4px}.status{font-size:11px;color:#67e8f9;margin-top:8px;min-height:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.switch{display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(34,211,238,.18);background:rgba(15,23,42,.45);border-radius:12px;padding:8px;margin-top:8px}.switch span{font-size:12px;color:#cbd5e1}.switch input{width:auto;margin:0}.history{margin-top:12px;display:grid;gap:8px;max-height:180px;overflow:auto}.item{border:1px solid rgba(34,211,238,.18);border-radius:12px;padding:8px;background:rgba(15,23,42,.45)}.item b{font-size:11px;color:#fff}.item p{font-size:11px;margin:4px 0 0;color:#94a3b8}.muted{color:#94a3b8;font-size:11px}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="kicker">HF ready realtime</div>
+    <div class="kicker">Extension polish · v2.2</div>
     <h1>ClaimRadar BG</h1>
-    <p>Overlay за YouTube/live дебати + tab audio capture към Hugging Face word-by-word realtime backend.</p>
+    <p>Overlay за YouTube/live дебати, captions/audio режим, mini mode, copy/report/send към app и local history.</p>
+
     <div class="grid">
       <button class="btn primary" id="openApp">App</button>
       <button class="btn" id="openYouTube">YouTube</button>
     </div>
+
+    <div class="switch"><span>Overlay включен</span><input type="checkbox" id="enabled"></div>
+    <div class="switch"><span>Floating mini mode</span><input type="checkbox" id="floatingMini"></div>
+    <div class="switch"><span>Auto-open YouTube transcript</span><input type="checkbox" id="autoOpenTranscript"></div>
+    <div class="switch"><span>Auto-start в YouTube</span><input type="checkbox" id="autoStartYouTube"></div>
+
+    <label>Режим на анализ</label>
+    <select id="inputMode">
+      <option value="captions">Captions / Transcript</option>
+      <option value="audio">Audio realtime</option>
+      <option value="selection">Selection / Page text</option>
+    </select>
+
     <label>Realtime WebSocket backend</label>
     <input id="backendUrl" placeholder="wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime" />
+
     <label>Audio chunk milliseconds</label>
     <input id="chunkMs" type="number" min="600" max="8000" step="100" />
-    <button class="btn" id="saveBackend">Запази realtime backend</button>
+
+    <button class="btn primary" id="saveBackend">Запази настройки</button>
+    <button class="btn" id="sendConfig">Приложи към текущия tab</button>
+    <button class="btn danger" id="clearHistory">Изчисти local history</button>
+
     <div class="status" id="status"></div>
-    <p class="note">След като Space-ът е Running, отвори YouTube/live страница и натисни „Realtime“ в overlay панела. На free CPU първото пускане може да е бавно.</p>
+
+    <div class="history" id="history"></div>
+    <p class="note">След промяна на extension файловете отвори chrome://extensions → Reload на ClaimRadar BG Overlay.</p>
   </div>
   <script src="popup.js"></script>
 </body>
