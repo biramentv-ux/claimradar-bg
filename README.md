@@ -14,7 +14,24 @@ license: mit
 
 Финална Hugging Face-ready версия за България: Gradio приложение + публичен архив + browser extension + word-by-word realtime WebSocket backend в един Space.
 
-## Финална версия 2.0 — готова за качване в Hugging Face
+## Версия 2.1 — Animated Product Redesign
+
+Добавено в `app.py`:
+
+- нов футуристичен **Animated Control Center** интерфейс;
+- animated aurora/grid background;
+- glassmorphism cards;
+- animated metric cards;
+- neon glow hover effects;
+- shimmer progress bars;
+- reveal animations чрез JS MutationObserver;
+- animated counters;
+- redesigned claim cards;
+- redesigned archive cards;
+- redesigned **Admin Control Center**;
+- еднакъв визуален стил за потребителския интерфейс и админ панела.
+
+## Готово за Hugging Face
 
 След качване в Space `DyrakArmy/claimradar-bg` приложението дава:
 
@@ -28,23 +45,7 @@ license: mit
 - текстова проверка;
 - онлайн търсене по източници;
 - публичен архив със Share ID;
-- feedback и admin панел.
-
-## Какво да качиш в Hugging Face
-
-Качи минимум тези файлове:
-
-```text
-app.py
-requirements.txt
-README.md
-```
-
-За browser extension-а качи/запази и папката:
-
-```text
-extension/
-```
+- feedback и animated admin панел.
 
 ## Realtime endpoint след качване
 
@@ -59,8 +60,6 @@ https://dyrakarmy-claimradar-bg.hf.space/health
 ```
 
 ## Extension
-
-След качване на Space-а:
 
 1. Свали repo-то като ZIP или clone.
 2. Отвори `chrome://extensions` или `edge://extensions`.
