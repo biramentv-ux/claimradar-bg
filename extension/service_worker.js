@@ -20,8 +20,8 @@ async function setupOffscreenDocument() {
 
 async function getDefaultConfig() {
   return await chrome.storage.sync.get({
-    backendUrl: 'ws://127.0.0.1:7861/ws/realtime',
-    chunkMs: 1200,
+    backendUrl: 'wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime',
+    chunkMs: 1400,
     autoSendToOverlay: true,
     realtimeMode: true
   });
@@ -49,7 +49,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         streamId,
         tabId: sender.tab?.id,
         backendUrl: message.backendUrl || config.backendUrl,
-        chunkMs: Number(message.chunkMs || config.chunkMs || 1200),
+        chunkMs: Number(message.chunkMs || config.chunkMs || 1400),
         realtimeMode: Boolean(message.realtimeMode ?? config.realtimeMode)
       });
       sendResponse({ ok: true });
