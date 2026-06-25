@@ -3,25 +3,38 @@ let stream = null;
 let socket = null;
 let currentTabId = null;
 let seq = 0;
+let pendingQueue = [];
 
 function sendToTab(payload) {
   chrome.runtime.sendMessage({ type: 'CR_TRANSCRIPT_UPDATE', tabId: currentTabId, ...payload });
 }
 
+function flushQueue() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  while (pendingQueue.length) socket.send(pendingQueue.shift());
+}
+
 function connectSocket(url) {
   socket = new WebSocket(url);
   socket.binaryType = 'arraybuffer';
-  socket.onopen = () => sendToTab({ status: 'Свързано към streaming backend.' });
-  socket.onclose = () => sendToTab({ status: 'Streaming връзката е затворена.' });
-  socket.onerror = () => sendToTab({ status: 'Грешка при streaming връзката.' });
+  socket.onopen = () => {
+    sendToTab({ status: 'Свързано към realtime backend.' });
+    flushQueue();
+  };
+  socket.onclose = () => sendToTab({ status: 'Realtime връзката е затворена.' });
+  socket.onerror = () => sendToTab({ status: 'Грешка при realtime връзката.' });
   socket.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data);
       sendToTab({
-        status: msg.status || 'Получен резултат.',
+        status: msg.status || 'Получен realtime резултат.',
         transcript: msg.transcript || '',
+        window_transcript: msg.window_transcript || '',
+        words: msg.words || [],
+        new_words: msg.new_words || [],
         claims: msg.claims || [],
-        partial: Boolean(msg.partial)
+        partial: Boolean(msg.partial),
+        elapsed: msg.elapsed || 0
       });
     } catch {
       sendToTab({ status: String(event.data || '') });
@@ -29,9 +42,10 @@ function connectSocket(url) {
   };
 }
 
-async function startCapture({ streamId, backendUrl, chunkMs, tabId }) {
+async function startCapture({ streamId, backendUrl, chunkMs, tabId, realtimeMode }) {
   currentTabId = tabId;
   seq = 0;
+  pendingQueue = [];
   if (recorder && recorder.state !== 'inactive') recorder.stop();
   if (stream) stream.getTracks().forEach(t => t.stop());
   if (socket) socket.close();
@@ -55,14 +69,19 @@ async function startCapture({ streamId, backendUrl, chunkMs, tabId }) {
   const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus'
     : 'audio/webm';
-  recorder = new MediaRecorder(stream, { mimeType });
+  recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 64000 });
 
   recorder.ondataavailable = async (event) => {
     if (!event.data || event.data.size === 0) return;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    const header = JSON.stringify({ type: 'chunk', seq: seq++, mimeType, ts: Date.now() });
+    const header = JSON.stringify({ type: 'chunk', seq: seq++, mimeType, ts: Date.now(), realtimeMode: Boolean(realtimeMode) });
+    const audioBuffer = await event.data.arrayBuffer();
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      pendingQueue.push(header, audioBuffer);
+      pendingQueue = pendingQueue.slice(-24);
+      return;
+    }
     socket.send(header);
-    socket.send(await event.data.arrayBuffer());
+    socket.send(audioBuffer);
   };
 
   recorder.onstop = () => {
@@ -71,8 +90,8 @@ async function startCapture({ streamId, backendUrl, chunkMs, tabId }) {
     sendToTab({ status: 'Tab audio capture stopped.' });
   };
 
-  recorder.start(Number(chunkMs || 4000));
-  sendToTab({ status: 'Tab audio capture started.' });
+  recorder.start(Number(chunkMs || 1200));
+  sendToTab({ status: `Tab audio realtime capture started: ${Number(chunkMs || 1200)} ms chunks.` });
 }
 
 function stopCapture() {
