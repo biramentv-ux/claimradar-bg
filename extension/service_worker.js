@@ -20,11 +20,24 @@ async function setupOffscreenDocument() {
 
 async function getDefaultConfig() {
   return await chrome.storage.sync.get({
+    enabled: true,
     backendUrl: 'wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime',
     chunkMs: 1400,
+    realtimeMode: true,
+    inputMode: 'captions',
+    floatingMini: false,
+    autoOpenTranscript: true,
+    autoStartYouTube: true,
     autoSendToOverlay: true,
-    realtimeMode: true
+    appUrl: 'https://dyrakarmy-claimradar-bg.hf.space'
   });
+}
+
+async function addHistory(item) {
+  const data = await chrome.storage.local.get({ crHistory: [] });
+  const next = [{ ...item, id: crypto.randomUUID(), createdAt: new Date().toISOString() }, ...(data.crHistory || [])].slice(0, 50);
+  await chrome.storage.local.set({ crHistory: next });
+  return next;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -37,6 +50,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === 'CR_SAVE_CONFIG') {
       await chrome.storage.sync.set(message.config || {});
       sendResponse({ ok: true });
+      return;
+    }
+
+    if (message?.type === 'CR_GET_HISTORY') {
+      const data = await chrome.storage.local.get({ crHistory: [] });
+      sendResponse({ ok: true, history: data.crHistory || [] });
+      return;
+    }
+
+    if (message?.type === 'CR_CLEAR_HISTORY') {
+      await chrome.storage.local.set({ crHistory: [] });
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message?.type === 'CR_ADD_HISTORY') {
+      const history = await addHistory(message.item || {});
+      sendResponse({ ok: true, history });
       return;
     }
 
