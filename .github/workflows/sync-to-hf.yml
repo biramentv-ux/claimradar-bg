@@ -8,12 +8,17 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: huggingface/hub-sync@v0.1.0
-        with:
-          github_repo_id: ${{ github.repository }}
-          huggingface_repo_id: DyrakArmy/claimradar-bg
-          repo_type: space
-          space_sdk: gradio
-          hf_token: ${{ secrets.HF_TOKEN }}
+      - name: Install hf CLI
+        run: |
+          curl -LsSf https://hf.co/cli/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Upload to Hugging Face Space
+        env:
+          HF_OIDC_RESOURCE: spaces/DyrakArmy/claimradar-bg
+        run: |
+          hf upload DyrakArmy/claimradar-bg . . --repo-type space --exclude ".git/*" --exclude ".github/*" --commit-message "Sync from GitHub ${GITHUB_SHA::7}"
