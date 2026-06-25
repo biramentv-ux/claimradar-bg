@@ -12,107 +12,109 @@ license: mit
 
 # ClaimRadar BG
 
-Публична тестова версия за България: Gradio приложение за проверка на твърдения, публичен архив, browser extension и word-by-word realtime speech-to-text backend prototype.
+Финална Hugging Face-ready версия за България: Gradio приложение + публичен архив + browser extension + word-by-word realtime WebSocket backend в един Space.
 
-## Версия 1.2 — Word-by-word Realtime
+## Финална версия 2.0 — готова за качване в Hugging Face
 
-Добавено:
+След качване в Space `DyrakArmy/claimradar-bg` приложението дава:
 
+- публичен Gradio интерфейс;
+- `/health` endpoint;
 - `/ws/realtime` WebSocket endpoint;
-- rolling audio buffer;
-- Faster Whisper `word_timestamps=True`;
-- diff алгоритъм за `new_words`;
-- live word stream в overlay панела;
-- по-къси audio chunks, default `1200 ms`;
-- extension default backend: `ws://127.0.0.1:7861/ws/realtime`;
-- Windows runners: `run_realtime_server.bat` и `run_realtime_server.ps1`;
-- Docker/VPS файлове: `Dockerfile.realtime` и `docker-compose.realtime.yml`;
-- пълно ръководство: `REALTIME_SETUP_BG.md`.
+- word-by-word realtime transcript за extension-а;
+- live claim cards;
+- аудио/видео транскрипция;
+- `.srt` export;
+- текстова проверка;
+- онлайн търсене по източници;
+- публичен архив със Share ID;
+- feedback и admin панел.
 
-## Бърз старт
+## Какво да качиш в Hugging Face
 
-```powershell
-.\run_realtime_server.bat
-```
-
-Провери:
+Качи минимум тези файлове:
 
 ```text
-http://127.0.0.1:7861/health
+app.py
+requirements.txt
+README.md
 ```
 
-В extension popup-а backend URL трябва да е:
+За browser extension-а качи/запази и папката:
 
 ```text
-ws://127.0.0.1:7861/ws/realtime
+extension/
 ```
 
-После отвори YouTube/live страница и натисни **Realtime** в overlay панела.
-
-## Browser extension
-
-Файлове:
+## Realtime endpoint след качване
 
 ```text
-extension/manifest.json
-extension/content.js
-extension/audio_controls.js
-extension/service_worker.js
-extension/offscreen.html
-extension/offscreen.js
-extension/popup.html
-extension/popup.js
-extension/README.md
+wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime
 ```
 
-Инсталация:
+Health check:
+
+```text
+https://dyrakarmy-claimradar-bg.hf.space/health
+```
+
+## Extension
+
+След качване на Space-а:
 
 1. Свали repo-то като ZIP или clone.
 2. Отвори `chrome://extensions` или `edge://extensions`.
 3. Включи Developer mode.
 4. Натисни Load unpacked.
 5. Избери папката `extension`.
-6. Отвори YouTube/live страница.
-7. Натисни **Realtime** в overlay панела.
+6. В popup-а backend URL трябва да е:
 
-## Gradio app
+```text
+wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime
+```
 
-- приема текст или `.txt` файл;
-- приема аудио/видео файл;
-- транскрибира чрез Faster Whisper;
-- открива вероятно проверими твърдения;
-- категоризира ги по теми;
-- предлага надеждни български и европейски източници;
-- опитва онлайн търсене по релевантни домейни;
-- генерира `.srt` субтитри;
-- запазва публични проверки в локален JSONL архив;
-- позволява търсене по Share ID.
+7. Отвори YouTube/live страница.
+8. Натисни **Realtime** в overlay панела.
 
-## Настройки
+## Hugging Face Variables
+
+Препоръчителни стойности за free CPU Space:
 
 ```bash
-WHISPER_MODEL_SIZE=small
+WHISPER_MODEL_SIZE=base
 WHISPER_DEVICE=cpu
 WHISPER_COMPUTE_TYPE=int8
 MAX_MEDIA_MB=80
-SEARCH_TIMEOUT=8
-PUBLIC_BASE_URL=https://dyrakarmy-claimradar-bg.hf.space
-STREAM_PORT=7861
-REALTIME_INTERVAL=1.6
-STREAM_MAX_BUFFER_MB=80
-ROLLING_WINDOW_MB=18
+REALTIME_INTERVAL=2.2
+ROLLING_WINDOW_MB=12
+STREAM_MAX_BUFFER_MB=60
 STREAM_LANGUAGE=bg
+PUBLIC_BASE_URL=https://dyrakarmy-claimradar-bg.hf.space
 ```
 
-По избор за админ панел:
+По избор за admin панел:
 
 ```bash
 ADMIN_KEY=your-secret-admin-key
 ```
 
-## Production
+## Важно за latency
 
-За реално публично live използване препоръчително: GPU VPS, HTTPS/WSS reverse proxy, persistent database, rate limiting, user/session IDs, diarization и AI evaluator с цитати.
+Free CPU Space ще работи, но няма да е broadcast-grade realtime. Първото пускане ще е по-бавно, защото моделът се зарежда. За ниска латентност използвай GPU Space или VPS.
+
+## Локален fallback
+
+Ако искаш локален backend:
+
+```powershell
+.\run_realtime_server.bat
+```
+
+и в extension popup-а смени backend на:
+
+```text
+ws://127.0.0.1:7861/ws/realtime
+```
 
 ## Дисклеймър
 
