@@ -12,35 +12,42 @@ license: mit
 
 # ClaimRadar BG
 
-Публична тестова версия за България: Gradio приложение за проверка на твърдения, публичен архив, browser extension и streaming speech-to-text backend prototype.
+Публична тестова версия за България: Gradio приложение за проверка на твърдения, публичен архив, browser extension и word-by-word realtime speech-to-text backend prototype.
 
-## Версия 1.1 — Browser Audio Capture + Streaming STT
+## Версия 1.2 — Word-by-word Realtime
 
 Добавено:
 
-- `streaming_server.py` — FastAPI WebSocket backend за speech-to-text;
-- extension tab audio capture чрез `chrome.tabCapture`;
-- offscreen document + `MediaRecorder` за запис на tab аудио;
-- изпращане на audio chunks към WebSocket backend;
-- live transcript в overlay панела;
-- live claim cards от backend-а;
-- popup настройки за backend адрес и chunk interval;
-- обновени зависимости: FastAPI + Uvicorn.
+- `/ws/realtime` WebSocket endpoint;
+- rolling audio buffer;
+- Faster Whisper `word_timestamps=True`;
+- diff алгоритъм за `new_words`;
+- live word stream в overlay панела;
+- по-къси audio chunks, default `1200 ms`;
+- extension default backend: `ws://127.0.0.1:7861/ws/realtime`;
+- Windows runners: `run_realtime_server.bat` и `run_realtime_server.ps1`;
+- Docker/VPS файлове: `Dockerfile.realtime` и `docker-compose.realtime.yml`;
+- пълно ръководство: `REALTIME_SETUP_BG.md`.
 
-### Streaming backend старт
+## Бърз старт
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python streaming_server.py
+```powershell
+.\run_realtime_server.bat
 ```
 
-WebSocket endpoint:
+Провери:
 
 ```text
-ws://127.0.0.1:7861/ws/transcribe
+http://127.0.0.1:7861/health
 ```
+
+В extension popup-а backend URL трябва да е:
+
+```text
+ws://127.0.0.1:7861/ws/realtime
+```
+
+После отвори YouTube/live страница и натисни **Realtime** в overlay панела.
 
 ## Browser extension
 
@@ -66,7 +73,7 @@ extension/README.md
 4. Натисни Load unpacked.
 5. Избери папката `extension`.
 6. Отвори YouTube/live страница.
-7. Натисни бутона **Аудио** в overlay панела.
+7. Натисни **Realtime** в overlay панела.
 
 ## Gradio app
 
@@ -84,15 +91,17 @@ extension/README.md
 ## Настройки
 
 ```bash
-WHISPER_MODEL_SIZE=base
+WHISPER_MODEL_SIZE=small
 WHISPER_DEVICE=cpu
 WHISPER_COMPUTE_TYPE=int8
 MAX_MEDIA_MB=80
 SEARCH_TIMEOUT=8
 PUBLIC_BASE_URL=https://dyrakarmy-claimradar-bg.hf.space
 STREAM_PORT=7861
-STREAM_MIN_SECONDS=8
-STREAM_MAX_BUFFER_MB=50
+REALTIME_INTERVAL=1.6
+STREAM_MAX_BUFFER_MB=80
+ROLLING_WINDOW_MB=18
+STREAM_LANGUAGE=bg
 ```
 
 По избор за админ панел:
@@ -101,9 +110,9 @@ STREAM_MAX_BUFFER_MB=50
 ADMIN_KEY=your-secret-admin-key
 ```
 
-## Важно
+## Production
 
-Streaming режимът е batch-streaming prototype. На CPU може да има забавяне. За production са нужни VPS/GPU, HTTPS/WSS endpoint и по-стабилен audio decoding pipeline.
+За реално публично live използване препоръчително: GPU VPS, HTTPS/WSS reverse proxy, persistent database, rate limiting, user/session IDs, diarization и AI evaluator с цитати.
 
 ## Дисклеймър
 
