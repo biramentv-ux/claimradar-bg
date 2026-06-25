@@ -3,30 +3,34 @@ title: BG Fact Checker
 emoji: 🔎
 colorFrom: blue
 colorTo: purple
-sdk: gradio
-sdk_version: 5.9.1
-app_file: launch.py
+sdk: docker
+app_port: 7860
 pinned: false
 license: mit
 ---
 
 # ClaimRadar BG
 
-Финална Hugging Face-ready версия за България: Gradio приложение + публичен архив + browser extension + word-by-word realtime WebSocket backend в един Space.
+Финална Hugging Face-ready версия за България: Docker Space с Gradio интерфейс + публичен архив + browser extension + word-by-word realtime WebSocket backend.
 
-## Hotfix — Hugging Face launcher
+## Важно: Space-ът трябва да е Docker
 
-Добавен е `launch.py`, който стартира приложението стабилно на стандартния Hugging Face порт `7860` и избягва грешката:
+Проектът вече използва **FastAPI + Gradio + WebSocket** в един процес. Това е най-стабилно като Hugging Face **Docker Space**.
 
-```text
-[Errno 98] address already in use: 0.0.0.0:7861
-```
-
-В README metadata вече е зададено:
+Metadata:
 
 ```yaml
-app_file: launch.py
+sdk: docker
+app_port: 7860
 ```
+
+Добавен е финален `Dockerfile`, който стартира:
+
+```bash
+python launch.py
+```
+
+на порт `7860`.
 
 ## Версия 2.1 — Animated Product Redesign
 
@@ -47,7 +51,7 @@ app_file: launch.py
 
 ## Готово за Hugging Face
 
-След качване в Space `DyrakArmy/claimradar-bg` приложението дава:
+След build приложението дава:
 
 - публичен Gradio интерфейс;
 - `/health` endpoint;
@@ -114,20 +118,6 @@ ADMIN_KEY=your-secret-admin-key
 ## Важно за latency
 
 Free CPU Space ще работи, но няма да е broadcast-grade realtime. Първото пускане ще е по-бавно, защото моделът се зарежда. За ниска латентност използвай GPU Space или VPS.
-
-## Локален fallback
-
-Ако искаш локален backend:
-
-```powershell
-.\run_realtime_server.bat
-```
-
-и в extension popup-а смени backend на:
-
-```text
-ws://127.0.0.1:7861/ws/realtime
-```
 
 ## Дисклеймър
 
