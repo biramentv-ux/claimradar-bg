@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "ClaimRadar BG Overlay",
-  "version": "1.1.0",
-  "description": "Live Bulgarian claim detection overlay with optional tab audio transcription backend.",
+  "version": "2.0.0",
+  "description": "Hugging Face-ready Bulgarian live claim detection overlay with tab audio realtime transcription.",
   "permissions": ["activeTab", "storage", "tabCapture", "offscreen"],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://*.youtube.com/*",
     "https://duckduckgo.com/*",
     "https://*.hf.space/*",
+    "wss://*.hf.space/*",
     "http://127.0.0.1/*",
     "http://localhost/*"
   ],
