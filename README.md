@@ -12,23 +12,42 @@ license: mit
 
 # ClaimRadar BG
 
-Футуристична публична тестова версия за България: транскрипция на българско аудио/видео, откриване на проверими публични твърдения, първична онлайн проверка по надеждни източници и публичен архив със Share ID.
+Публична тестова версия за България: Gradio приложение за проверка на твърдения плюс browser extension prototype.
 
-## Версия 0.4 — публичен продукт
+## Версия 1.0 — Browser Extension Prototype
 
-Добавено:
+Добавено в папка `extension/`:
 
-- **Публичен архив** със запазени проверки;
-- **Share ID** за всяка запазена проверка;
-- зареждане на проверка по ID;
-- export на архива като `.json`;
-- запис на обратна връзка в JSONL файл;
-- заключен **Admin панел**;
-- променлива `ADMIN_KEY` за отключване на админ преглед;
-- променлива `PUBLIC_BASE_URL` за генериране на share адреси;
-- публичен product pipeline: текст/транскрипт → твърдения → онлайн търсене → запазване → Share ID → архив.
+- Chrome/Edge extension с Manifest V3;
+- overlay панел върху YouTube и web страници;
+- автоматичен старт в YouTube;
+- четене на видими captions/transcript сегменти;
+- анализ на маркиран текст от страницата;
+- локален Bulgarian claim detector в браузъра;
+- source search линкове по домейни;
+- бутон към публичното ClaimRadar BG приложение;
+- футуристичен cyber/neon дизайн.
 
-## Какво прави
+### Файлове
+
+```text
+extension/manifest.json
+extension/content.js
+extension/popup.html
+extension/popup.js
+extension/README.md
+```
+
+### Инсталация
+
+1. Свали repo-то като ZIP или clone.
+2. Отвори `chrome://extensions` или `edge://extensions`.
+3. Включи Developer mode.
+4. Натисни Load unpacked.
+5. Избери папката `extension`.
+6. Отвори YouTube видео с captions или transcript.
+
+## Gradio app
 
 - приема текст или `.txt` файл;
 - приема аудио/видео файл;
@@ -42,8 +61,6 @@ license: mit
 - позволява търсене по Share ID.
 
 ## Настройки
-
-По подразбиране се използва:
 
 ```bash
 WHISPER_MODEL_SIZE=base
@@ -59,10 +76,6 @@ PUBLIC_BASE_URL=https://dyrakarmy-claimradar-bg.hf.space
 ```bash
 ADMIN_KEY=your-secret-admin-key
 ```
-
-## Важно за безплатен Hugging Face Space
-
-Локалният JSONL архив може да се загуби при рестарт, ако Space-ът няма persistent storage. За реален production вариант следващата стъпка е външна база данни или Hugging Face persistent storage.
 
 ## Дисклеймър
 
