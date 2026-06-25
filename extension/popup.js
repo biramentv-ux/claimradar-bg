@@ -1,7 +1,7 @@
 async function loadConfig() {
   const config = await chrome.runtime.sendMessage({ type: 'CR_GET_CONFIG' });
-  document.getElementById('backendUrl').value = config.backendUrl || 'ws://127.0.0.1:7861/ws/transcribe';
-  document.getElementById('chunkMs').value = config.chunkMs || 4000;
+  document.getElementById('backendUrl').value = config.backendUrl || 'ws://127.0.0.1:7861/ws/realtime';
+  document.getElementById('chunkMs').value = config.chunkMs || 1200;
 }
 
 function setStatus(text) {
@@ -17,10 +17,10 @@ document.getElementById('openYouTube').addEventListener('click', () => {
 });
 
 document.getElementById('saveBackend').addEventListener('click', async () => {
-  const backendUrl = document.getElementById('backendUrl').value.trim();
-  const chunkMs = Math.max(1000, Math.min(15000, Number(document.getElementById('chunkMs').value || 4000)));
-  await chrome.runtime.sendMessage({ type: 'CR_SAVE_CONFIG', config: { backendUrl, chunkMs } });
-  setStatus('Запазено. Отвори страница и натисни „Аудио“ в overlay панела.');
+  const backendUrl = document.getElementById('backendUrl').value.trim() || 'ws://127.0.0.1:7861/ws/realtime';
+  const chunkMs = Math.max(600, Math.min(8000, Number(document.getElementById('chunkMs').value || 1200)));
+  await chrome.runtime.sendMessage({ type: 'CR_SAVE_CONFIG', config: { backendUrl, chunkMs, realtimeMode: true } });
+  setStatus('Запазено. Отвори страница и натисни „Realtime“ в overlay панела.');
 });
 
 loadConfig().catch(err => setStatus(String(err?.message || err)));
