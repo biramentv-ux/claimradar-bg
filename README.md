@@ -11,7 +11,65 @@ license: mit
 
 # ClaimRadar BG
 
-Финална Hugging Face-ready версия за България: Docker Space с Gradio интерфейс, публичен архив, browser extension, word-by-word realtime WebSocket backend, AI verdict engine, Search API слой и публични result pages.
+Финална Hugging Face-ready версия за България: Docker Space с Gradio интерфейс, публичен архив, browser extension, word-by-word realtime WebSocket backend, AI verdict engine, Search API слой, публични result pages и продуктова информационна страница.
+
+## Основни публични страници
+
+```text
+https://dyrakarmy-claimradar-bg.hf.space
+https://dyrakarmy-claimradar-bg.hf.space/product
+https://dyrakarmy-claimradar-bg.hf.space/health
+https://dyrakarmy-claimradar-bg.hf.space/search/status
+https://dyrakarmy-claimradar-bg.hf.space/sources/whitelist
+https://dyrakarmy-claimradar-bg.hf.space/check/<share_id>
+https://dyrakarmy-claimradar-bg.hf.space/api/check/<share_id>
+```
+
+## Рапорт
+
+Подробният технически рапорт е в:
+
+```text
+PROJECT_REPORT_BG.md
+```
+
+Той описва:
+
+- общата архитектура;
+- Gradio UI;
+- FastAPI backend;
+- Hugging Face Docker deployment;
+- GitHub Actions sync;
+- AI verdict engine;
+- Search API layer;
+- публичен архив;
+- browser extension;
+- admin панел;
+- environment variables;
+- ограничения;
+- препоръчани следващи стъпки за production миграция.
+
+## Версия 2.4 — Product Page + Project Report
+
+Добавено:
+
+- route `/product`;
+- публична продуктова страница за крайни потребители;
+- технически рапорт `PROJECT_REPORT_BG.md`;
+- линк към `/product` от публичните result pages;
+- обновен public layer version: `2.4-product-page`.
+
+Продуктовата страница обяснява:
+
+- какво е ClaimRadar BG;
+- за кого е предназначен;
+- как работи;
+- какви режими има;
+- какво означават verdict-ите;
+- какви източници използва;
+- какво е публичен архив;
+- какви са ограниченията;
+- какви са следващите production стъпки.
 
 ## Версия 2.3 — Search API + Public Result Pages
 
@@ -29,19 +87,7 @@ license: mit
 - endpoint `/search/status`;
 - endpoint `/sources/whitelist`;
 - JSON endpoint `/api/check/<share_id>`;
-- истинска публична страница `/check/<share_id>`;
-- public page с:
-  - заглавие;
-  - дата;
-  - режим;
-  - оригинален preview;
-  - verdict/evidence HTML;
-  - confidence;
-  - evidence links;
-  - бутон **Копирай резултата**;
-  - бутон **Сподели**;
-  - JSON линк;
-  - disclaimer.
+- истинска публична страница `/check/<share_id>`.
 
 ## Search API настройки
 
@@ -92,20 +138,6 @@ ec.europa.eu
 factcheck.bg
 bta.bg
 bnr.bg
-```
-
-## Public result pages
-
-След запазване на проверка Share URL вече може да бъде:
-
-```text
-https://dyrakarmy-claimradar-bg.hf.space/check/<share_id>
-```
-
-JSON версия:
-
-```text
-https://dyrakarmy-claimradar-bg.hf.space/api/check/<share_id>
 ```
 
 ## Версия 2.2 — AI Verdict Engine
@@ -164,6 +196,7 @@ python launch.py
 След build приложението дава:
 
 - публичен Gradio интерфейс;
+- `/product` продуктова страница;
 - `/health` endpoint;
 - `/search/status` endpoint;
 - `/sources/whitelist` endpoint;
@@ -185,18 +218,6 @@ python launch.py
 
 ```text
 wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime
-```
-
-Health check:
-
-```text
-https://dyrakarmy-claimradar-bg.hf.space/health
-```
-
-Search status:
-
-```text
-https://dyrakarmy-claimradar-bg.hf.space/search/status
 ```
 
 ## Hugging Face Variables
