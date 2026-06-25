@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "ClaimRadar BG Overlay",
+  "version": "1.0.0",
+  "description": "Live Bulgarian claim detection overlay for YouTube, debates and public web pages.",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://*.youtube.com/*",
+    "https://duckduckgo.com/*",
+    "https://*.hf.space/*"
+  ],
+  "action": {
+    "default_title": "ClaimRadar BG",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
