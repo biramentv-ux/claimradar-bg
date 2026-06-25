@@ -5,7 +5,7 @@ colorFrom: blue
 colorTo: purple
 sdk: gradio
 sdk_version: 5.9.1
-app_file: app.py
+app_file: launch.py
 pinned: false
 license: mit
 ---
@@ -13,6 +13,20 @@ license: mit
 # ClaimRadar BG
 
 Финална Hugging Face-ready версия за България: Gradio приложение + публичен архив + browser extension + word-by-word realtime WebSocket backend в един Space.
+
+## Hotfix — Hugging Face launcher
+
+Добавен е `launch.py`, който стартира приложението стабилно на стандартния Hugging Face порт `7860` и избягва грешката:
+
+```text
+[Errno 98] address already in use: 0.0.0.0:7861
+```
+
+В README metadata вече е зададено:
+
+```yaml
+app_file: launch.py
+```
 
 ## Версия 2.1 — Animated Product Redesign
 
