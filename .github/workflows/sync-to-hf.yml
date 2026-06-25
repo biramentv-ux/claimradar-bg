@@ -5,20 +5,66 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: sync-to-hf-space
+  cancel-in-progress: true
+
 jobs:
   sync:
+    name: Push GitHub main to Hugging Face
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
+    env:
+      HF_SPACE_ID: DyrakArmy/claimradar-bg
+      HF_OIDC_RESOURCE: spaces/DyrakArmy/claimradar-bg
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Install hf CLI
+      - name: Checkout GitHub repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Hugging Face CLI
         run: |
-          curl -LsSf https://hf.co/cli/install.sh | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Upload to Hugging Face Space
-        env:
-          HF_OIDC_RESOURCE: spaces/DyrakArmy/claimradar-bg
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade "huggingface_hub[cli]"
+          hf --help >/dev/null
+
+      - name: Validate Hugging Face Space metadata
         run: |
-          hf upload DyrakArmy/claimradar-bg . . --repo-type space --exclude ".git/*" --exclude ".github/*" --commit-message "Sync from GitHub ${GITHUB_SHA::7}"
+          set -euo pipefail
+          test -f README.md
+          test -f Dockerfile
+          test -f app.py
+          test -f launch.py
+          grep -q "sdk: docker" README.md
+          grep -q "app_port: 7860" README.md
+          echo "Metadata OK: Docker Space on port 7860"
+
+      - name: Sync repository to Hugging Face Space
+        run: |
+          set -euo pipefail
+          if [ -n "${HF_TOKEN:-}" ]; then
+            echo "Using HF_TOKEN secret fallback."
+            hf auth login --token "$HF_TOKEN"
+          else
+            echo "Using Hugging Face Trusted Publisher / OIDC."
+          fi
+
+          hf upload "$HF_SPACE_ID" . . \
+            --repo-type space \
+            --revision main \
+            --exclude ".git/*" \
+            --exclude ".github/*" \
+            --exclude "__pycache__/*" \
+            --exclude "*.pyc" \
+            --exclude "data/*" \
+            --commit-message "Sync from GitHub ${GITHUB_SHA::7}"
+
+      - name: Summary
+        run: |
+          echo "Synced ${GITHUB_SHA} to https://huggingface.co/spaces/${HF_SPACE_ID}"
+          echo "Space app: https://dyrakarmy-claimradar-bg.hf.space"
+          echo "Health: https://dyrakarmy-claimradar-bg.hf.space/health"
