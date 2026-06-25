@@ -1,7 +1,7 @@
 ---
 title: BG Fact Checker
 emoji: 🔎
-colorFrom: cyan
+colorFrom: blue
 colorTo: purple
 sdk: gradio
 sdk_version: 5.9.1
