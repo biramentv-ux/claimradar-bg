@@ -1,26 +1,37 @@
+import json
 import os
 import re
-import json
-import uuid
 import tempfile
+import time
+import uuid
 import urllib.parse
 import urllib.request
-from pathlib import Path
 from datetime import datetime, timezone
 from html import escape, unescape
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 import gradio as gr
+import uvicorn
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from faster_whisper import WhisperModel
 
 APP_TITLE = "ClaimRadar BG"
-APP_VERSION = "0.4"
+APP_VERSION = "2.0-hf-realtime"
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://dyrakarmy-claimradar-bg.hf.space")
 DISCLAIMER = "Тестов инструмент: резултатите са ориентир за проверка, не окончателна правна, политическа или журналистическа оценка."
-MAX_MEDIA_MB = int(os.getenv("MAX_MEDIA_MB", "80"))
+
 MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+LANGUAGE = os.getenv("STREAM_LANGUAGE", "bg")
+MAX_MEDIA_MB = int(os.getenv("MAX_MEDIA_MB", "80"))
 SEARCH_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT", "8"))
+REALTIME_INTERVAL = float(os.getenv("REALTIME_INTERVAL", "2.2"))
+ROLLING_WINDOW_MB = int(os.getenv("ROLLING_WINDOW_MB", "12"))
+STREAM_MAX_BUFFER_MB = int(os.getenv("STREAM_MAX_BUFFER_MB", "60"))
 ADMIN_KEY = os.getenv("ADMIN_KEY", "")
 
 DATA_DIR = Path("data")
@@ -104,7 +115,7 @@ NEGATIVE_EVIDENCE_WORDS = ["невярно", "неверно", "подвежда
 POSITIVE_EVIDENCE_WORDS = ["данни", "статистика", "отчет", "доклад", "таблица", "публикация", "резултати"]
 
 
-def now_iso():
+def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
@@ -126,26 +137,30 @@ def read_jsonl(path: Path, limit=200):
     return list(reversed(rows[-limit:]))
 
 
-def get_model():
+def get_model() -> WhisperModel:
     global _model
     if _model is None:
         _model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
     return _model
 
 
-def topic_for(sentence):
+def topic_for(sentence: str) -> str:
     text = sentence.lower()
     scores = {topic: sum(1 for word in words if word in text) for topic, words in KEYWORDS.items()}
     topic, score = max(scores.items(), key=lambda item: item[1])
     return topic if score else "друго"
 
 
-def split_text(text):
+def source_links(topic: str):
+    return [(name, SOURCE_LINKS[name]) for name in TOPIC_SOURCES.get(topic, TOPIC_SOURCES["друго"])]
+
+
+def split_text(text: str) -> List[str]:
     cleaned = re.sub(r"\s+", " ", text or "").strip()
     return [c.strip() for c in re.split(r"(?<=[.!?])\s+|\n+", cleaned) if len(c.strip()) > 20]
 
 
-def score_claim(sentence):
+def score_claim(sentence: str):
     low = sentence.lower()
     score = 18
     reasons = []
@@ -176,18 +191,21 @@ def score_claim(sentence):
     return score, label, ", ".join(reasons) or "общо твърдение"
 
 
-def source_links(topic):
-    return [(name, SOURCE_LINKS[name]) for name in TOPIC_SOURCES.get(topic, TOPIC_SOURCES["друго"])]
-
-
-def analyze_claims(text):
+def analyze_claims(text: str, max_claims=30):
     rows = []
-    for chunk in split_text(text)[:30]:
+    for chunk in split_text(text)[:max_claims]:
         score, label, reason = score_claim(chunk)
         if score < 25 and label != "непроверимо/мнение":
             continue
         topic = topic_for(chunk)
-        rows.append({"claim": chunk, "topic": topic, "label": label, "confidence": score, "reason": reason, "sources": source_links(topic)})
+        rows.append({
+            "claim": chunk,
+            "topic": topic,
+            "label": label,
+            "confidence": score,
+            "reason": reason,
+            "sources": [{"name": name, "url": url} for name, url in source_links(topic)],
+        })
     return rows
 
 
@@ -214,7 +232,7 @@ def build_search_url(query):
 
 def search_web(query, limit=3):
     search_url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
-    request = urllib.request.Request(search_url, headers={"User-Agent": "Mozilla/5.0 ClaimRadarBG/0.4"})
+    request = urllib.request.Request(search_url, headers={"User-Agent": "Mozilla/5.0 ClaimRadarBG/2.0"})
     try:
         with urllib.request.urlopen(request, timeout=SEARCH_TIMEOUT) as response:
             html = response.read().decode("utf-8", errors="ignore")
@@ -253,7 +271,13 @@ def collect_evidence(claim, topic, per_query=2):
     for source_name, query in evidence_queries_for_claim(claim, topic):
         found = search_web(query, limit=per_query)
         if not found:
-            evidence.append({"source": source_name, "title": "Отвори ръчно търсене", "url": build_search_url(query), "snippet": "Автоматичното търсене не върна надежден резултат. Отвори линка и провери ръчно.", "manual": True})
+            evidence.append({
+                "source": source_name,
+                "title": "Отвори ръчно търсене",
+                "url": build_search_url(query),
+                "snippet": "Автоматичното търсене не върна резултат. Отвори линка и провери ръчно.",
+                "manual": True,
+            })
             continue
         for item in found:
             if item["url"] in used_urls:
@@ -285,7 +309,7 @@ def render_results(rows):
     cards = ['<div class="results-grid">']
     copy_lines = [f"ClaimRadar BG v{APP_VERSION}", DISCLAIMER, ""]
     for idx, item in enumerate(rows, 1):
-        source_html = "".join([f'<a class="source-chip" href="{url}" target="_blank">{escape(name)}</a>' for name, url in item["sources"]])
+        source_html = "".join([f'<a class="source-chip" href="{escape(src["url"])}" target="_blank">{escape(src["name"])}</a>' for src in item["sources"]])
         confidence = int(item["confidence"])
         cards.append(f"""
 <div class="claim-card">
@@ -297,7 +321,7 @@ def render_results(rows):
   <div class="caution">Провери ръчно преди публикуване.</div>
 </div>
 """)
-        copy_lines += [f"{idx}. [{item['label']}] [{item['topic']}] {item['claim']}", f"Увереност: {confidence}% | Причина: {item['reason']}", "Източници: " + ", ".join([f"{name} - {url}" for name, url in item["sources"]]), ""]
+        copy_lines += [f"{idx}. [{item['label']}] [{item['topic']}] {item['claim']}", f"Увереност: {confidence}% | Причина: {item['reason']}", "Източници: " + ", ".join([f"{s['name']} - {s['url']}" for s in item["sources"]]), ""]
     cards.append("</div>")
     return "\n".join(cards), "\n".join(copy_lines)
 
@@ -315,7 +339,7 @@ def render_real_check(rows):
         for ev_idx, ev in enumerate(evidence, 1):
             cls = "evidence-link manual" if ev.get("manual") else "evidence-link"
             ev_html.append(f'<a class="{cls}" href="{escape(ev["url"])}" target="_blank"><b>{ev_idx}. {escape(ev.get("source", "източник"))}</b><span>{escape(ev.get("title", "линк"))}</span><small>{escape(ev.get("snippet", ""))}</small></a>')
-            ev_copy.append(f'{ev_idx}. {ev.get("source", "източник")}: {ev.get("title", "линк")} — {ev.get("url", "")}')
+            ev_copy.append(f'{ev_idx}. {ev.get("source", "източник")}: {ev.get("title", "линк")} — {ev.get("url", "")}' )
         cards.append(f"""
 <div class="claim-card evidence-card">
   <div class="claim-top"><span class="claim-index">LIVE #{idx:02}</span><span class="topic-pill">{escape(item["topic"])}</span><span class="label-pill">{escape(verdict)}</span></div>
@@ -369,7 +393,7 @@ def load_public_check(check_id):
         if rec.get("id") == check_id:
             header = f'<div class="archive-head"><b>{escape(rec.get("title", "Проверка"))}</b><span>ID: {escape(check_id)} · {escape(rec.get("created_at", ""))} · {escape(rec.get("mode", ""))}</span></div>'
             return header + rec.get("html", ""), rec.get("copy_text", "")
-    return '<div class="empty-state">Не е намерена проверка с това ID. Възможно е Space-ът да е рестартирал или да няма persistent storage.</div>', ""
+    return '<div class="empty-state">Не е намерена проверка с това ID. На free Space локалният архив може да се изтрие при рестарт.</div>', ""
 
 
 def list_public_checks():
@@ -421,15 +445,14 @@ def ts(seconds):
     return f"{total//3600:02}:{(total%3600)//60:02}:{total%60:02},{ms:03}"
 
 
-def transcribe(file_path):
+def transcribe_file(file_path):
     if not file_path:
         return "", None, "Качи аудио или видео файл."
     path = getattr(file_path, "name", file_path)
     size = file_size_mb(path)
     if size > MAX_MEDIA_MB:
-        return "", None, f"Файлът е {size:.1f} MB. За публичното демо лимитът е {MAX_MEDIA_MB} MB. Качи по-кратък файл."
-    model = get_model()
-    segments, _ = model.transcribe(path, language="bg", beam_size=5, vad_filter=True)
+        return "", None, f"Файлът е {size:.1f} MB. Лимитът е {MAX_MEDIA_MB} MB. Качи по-кратък файл."
+    segments, _ = get_model().transcribe(path, language=LANGUAGE, beam_size=1, vad_filter=True)
     segments = list(segments)
     transcript = " ".join(seg.text.strip() for seg in segments).strip()
     srt_blocks = []
@@ -442,13 +465,13 @@ def transcribe(file_path):
 
 
 def transcribe_and_analyze(file_path):
-    transcript, srt_file, status = transcribe(file_path)
+    transcript, srt_file, status = transcribe_file(file_path)
     html, copy_text, count = analyze(transcript)
     return transcript, html, copy_text, srt_file, status + " · " + count
 
 
 def transcribe_and_real_check(file_path):
-    transcript, srt_file, status = transcribe(file_path)
+    transcript, srt_file, status = transcribe_file(file_path)
     html, copy_text, count = real_check(transcript)
     return transcript, html, copy_text, srt_file, status + " · " + count
 
@@ -463,7 +486,7 @@ def admin_panel(key):
     if ADMIN_KEY and key != ADMIN_KEY:
         return '<div class="empty-state">Грешен admin key.</div>'
     if not ADMIN_KEY:
-        return '<div class="empty-state">ADMIN_KEY не е зададен в Space Variables. Админ панелът е заключен за публичната демо версия.</div>'
+        return '<div class="empty-state">ADMIN_KEY не е зададен в Space Variables. Админ панелът е заключен.</div>'
     checks = read_jsonl(CHECKS_FILE, limit=20)
     feedback = read_jsonl(FEEDBACK_FILE, limit=50)
     html = ['<div class="admin-grid"><div class="claim-card"><h3>Последни проверки</h3>']
@@ -476,16 +499,149 @@ def admin_panel(key):
     return "\n".join(html)
 
 
+def buffer_to_file(buffer: bytearray, suffix: str = ".webm") -> str:
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp.write(buffer)
+    tmp.close()
+    return tmp.name
+
+
+def transcribe_buffer(buffer: bytearray, suffix: str = ".webm", word_timestamps: bool = False) -> Tuple[str, List[Dict[str, Any]]]:
+    if not buffer:
+        return "", []
+    tmp_path = buffer_to_file(buffer, suffix)
+    try:
+        segments, _ = get_model().transcribe(
+            tmp_path,
+            language=LANGUAGE,
+            beam_size=1,
+            best_of=1,
+            vad_filter=True,
+            word_timestamps=word_timestamps,
+            condition_on_previous_text=False,
+            without_timestamps=False,
+        )
+        text_parts, words = [], []
+        for seg in segments:
+            if (seg.text or "").strip():
+                text_parts.append(seg.text.strip())
+            if word_timestamps and getattr(seg, "words", None):
+                for word in seg.words:
+                    token = (word.word or "").strip()
+                    if token:
+                        words.append({"word": token, "start": float(word.start or 0), "end": float(word.end or 0), "probability": float(word.probability or 0)})
+        return " ".join(text_parts).strip(), words
+    finally:
+        try:
+            Path(tmp_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def normalize_words(words: List[Dict[str, Any]]) -> List[str]:
+    return [re.sub(r"\s+", " ", w.get("word", "")).strip() for w in words if w.get("word")]
+
+
+def diff_new_words(previous: List[str], current: List[str]) -> List[str]:
+    if not current:
+        return []
+    if not previous:
+        return current
+    max_overlap = min(len(previous), len(current), 80)
+    for size in range(max_overlap, 0, -1):
+        if previous[-size:] == current[:size]:
+            return current[size:]
+    joined_prev = " ".join(previous[-40:]).lower()
+    for i, word in enumerate(current):
+        if word.lower() not in joined_prev:
+            return current[i:]
+    return []
+
+
+def trim_buffer(buffer: bytearray, max_mb: int) -> bytearray:
+    max_bytes = max_mb * 1024 * 1024
+    if len(buffer) <= max_bytes:
+        return buffer
+    return bytearray(buffer[-max_bytes:])
+
+
+async def receive_realtime(websocket: WebSocket, realtime=True):
+    await websocket.accept()
+    buffer = bytearray()
+    suffix = ".webm"
+    started = time.time()
+    last_transcribe = 0.0
+    stable_words: List[str] = []
+    await websocket.send_text(json.dumps({"status": "HF realtime backend connected.", "partial": True, "words": [], "version": APP_VERSION}, ensure_ascii=False))
+    try:
+        while True:
+            message = await websocket.receive()
+            if "text" in message:
+                try:
+                    payload = json.loads(message["text"])
+                except json.JSONDecodeError:
+                    payload = {"type": "text", "value": message["text"]}
+                if payload.get("mimeType", "").startswith("audio/webm"):
+                    suffix = ".webm"
+                if payload.get("type") == "stop":
+                    transcript, words = transcribe_buffer(buffer, suffix=suffix, word_timestamps=True)
+                    current_words = normalize_words(words)
+                    await websocket.send_text(json.dumps({
+                        "status": "Final transcript ready.",
+                        "transcript": transcript,
+                        "words": current_words,
+                        "new_words": diff_new_words(stable_words, current_words),
+                        "claims": analyze_claims(transcript, max_claims=20)[-8:],
+                        "partial": False,
+                        "elapsed": round(time.time() - started, 2),
+                    }, ensure_ascii=False))
+                    break
+                continue
+            if "bytes" in message:
+                buffer.extend(message["bytes"])
+                buffer = trim_buffer(buffer, STREAM_MAX_BUFFER_MB)
+                now = time.time()
+                interval = REALTIME_INTERVAL if realtime else float(os.getenv("STREAM_MIN_SECONDS", "8"))
+                if now - last_transcribe < interval:
+                    continue
+                last_transcribe = now
+                rolling = trim_buffer(bytearray(buffer), ROLLING_WINDOW_MB if realtime else STREAM_MAX_BUFFER_MB)
+                transcript, words = transcribe_buffer(rolling, suffix=suffix, word_timestamps=realtime)
+                current_words = normalize_words(words) if realtime else transcript.split()
+                new_words = diff_new_words(stable_words, current_words)
+                if new_words:
+                    stable_words.extend(new_words)
+                    stable_words = stable_words[-500:]
+                stable_text = " ".join(stable_words).strip() or transcript
+                await websocket.send_text(json.dumps({
+                    "status": f"Realtime: +{len(new_words)} words · {len(stable_text)} chars · {int(now - started)} sec.",
+                    "transcript": stable_text,
+                    "window_transcript": transcript,
+                    "words": current_words[-80:],
+                    "new_words": new_words,
+                    "claims": analyze_claims(stable_text, max_claims=20)[-8:],
+                    "partial": True,
+                    "elapsed": round(now - started, 2),
+                }, ensure_ascii=False))
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:
+        try:
+            await websocket.send_text(json.dumps({"status": "Realtime error: " + str(exc), "partial": True}, ensure_ascii=False))
+        except Exception:
+            pass
+
+
 CSS = """
-:root{--neon-cyan:#22d3ee;--neon-purple:#a855f7;--neon-blue:#2563eb}.gradio-container{max-width:1220px!important;margin:auto!important;background:radial-gradient(circle at 10% 10%,rgba(34,211,238,.18),transparent 26%),radial-gradient(circle at 82% 16%,rgba(168,85,247,.20),transparent 24%),radial-gradient(circle at 50% 100%,rgba(37,99,235,.14),transparent 32%),#020617!important}body,.gradio-container{color:#e5e7eb!important}#neon-hero{position:relative;padding:34px;border-radius:28px;overflow:hidden;border:1px solid rgba(34,211,238,.28);background:linear-gradient(135deg,rgba(2,6,23,.95),rgba(30,27,75,.82));box-shadow:0 0 42px rgba(34,211,238,.16),inset 0 0 80px rgba(168,85,247,.10)}#neon-hero:before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(34,211,238,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.09) 1px,transparent 1px);background-size:36px 36px;mask-image:linear-gradient(to bottom,white,transparent)}.hero-content{position:relative;z-index:2}.hero-kicker{color:var(--neon-cyan);letter-spacing:.22em;text-transform:uppercase;font-size:12px;font-weight:800}.hero-title{margin:10px 0 8px;font-size:clamp(34px,7vw,72px);line-height:.9;font-weight:950;color:white;text-shadow:0 0 24px rgba(34,211,238,.32)}.hero-subtitle{max-width:840px;color:#cbd5e1;font-size:18px}.stat-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}.stat-chip{border:1px solid rgba(168,85,247,.28);background:rgba(15,23,42,.62);border-radius:999px;padding:9px 14px;color:#e0f2fe}.gr-button-primary{background:linear-gradient(90deg,#0891b2,#7c3aed)!important;border:0!important;box-shadow:0 0 22px rgba(34,211,238,.22)!important}.results-grid,.history-grid,.admin-grid{display:grid;gap:16px}.claim-card,.history-card{border:1px solid rgba(34,211,238,.22);background:linear-gradient(135deg,rgba(15,23,42,.82),rgba(30,41,59,.62));border-radius:22px;padding:18px;box-shadow:0 0 26px rgba(34,211,238,.08)}.evidence-card{border-color:rgba(168,85,247,.35);box-shadow:0 0 30px rgba(168,85,247,.12)}.claim-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.claim-index{color:#67e8f9;font-family:ui-monospace,monospace;font-weight:900}.topic-pill,.label-pill,.source-chip{display:inline-flex;border-radius:999px;padding:6px 10px;font-size:12px;text-decoration:none}.topic-pill{background:rgba(37,99,235,.18);color:#bfdbfe;border:1px solid rgba(59,130,246,.25)}.label-pill{background:rgba(168,85,247,.18);color:#e9d5ff;border:1px solid rgba(168,85,247,.28)}.claim-text{font-size:16px;color:#f8fafc;line-height:1.55}.meter{height:7px;border-radius:999px;background:rgba(148,163,184,.17);overflow:hidden;margin:14px 0 8px}.meter span{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#a855f7);border-radius:999px}.meta-line{color:#cbd5e1;font-size:13px;margin-bottom:12px}.sources-row{display:flex;flex-wrap:wrap;gap:8px}.source-chip{color:#cffafe!important;border:1px solid rgba(34,211,238,.24);background:rgba(8,145,178,.12)}.evidence-list{display:grid;gap:10px;margin-top:12px}.evidence-link{display:grid;gap:4px;text-decoration:none!important;color:#e0f2fe!important;border:1px solid rgba(34,211,238,.22);background:rgba(2,6,23,.36);border-radius:16px;padding:12px}.evidence-link span{color:#fff}.evidence-link small{color:#94a3b8;line-height:1.35}.evidence-link.manual{border-style:dashed;color:#fde68a!important}.caution{margin-top:12px;color:#fbbf24;font-size:12px}.empty-state{border:1px dashed rgba(148,163,184,.35);border-radius:20px;padding:24px;color:#cbd5e1;background:rgba(15,23,42,.5)}.footer-note,.history-card span,.history-card p{color:#94a3b8;font-size:13px}.archive-head{border:1px solid rgba(34,211,238,.22);border-radius:18px;padding:14px;margin-bottom:14px;background:rgba(15,23,42,.55);display:grid;gap:4px}.archive-head span{color:#94a3b8}
+:root{--neon-cyan:#22d3ee;--neon-purple:#a855f7;--neon-blue:#2563eb}.gradio-container{max-width:1220px!important;margin:auto!important;background:radial-gradient(circle at 10% 10%,rgba(34,211,238,.18),transparent 26%),radial-gradient(circle at 82% 16%,rgba(168,85,247,.20),transparent 24%),radial-gradient(circle at 50% 100%,rgba(37,99,235,.14),transparent 32%),#020617!important}body,.gradio-container{color:#e5e7eb!important}#neon-hero{position:relative;padding:34px;border-radius:28px;overflow:hidden;border:1px solid rgba(34,211,238,.28);background:linear-gradient(135deg,rgba(2,6,23,.95),rgba(30,27,75,.82));box-shadow:0 0 42px rgba(34,211,238,.16),inset 0 0 80px rgba(168,85,247,.10)}#neon-hero:before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(34,211,238,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.09) 1px,transparent 1px);background-size:36px 36px;mask-image:linear-gradient(to bottom,white,transparent)}.hero-content{position:relative;z-index:2}.hero-kicker{color:var(--neon-cyan);letter-spacing:.22em;text-transform:uppercase;font-size:12px;font-weight:800}.hero-title{margin:10px 0 8px;font-size:clamp(34px,7vw,72px);line-height:.9;font-weight:950;color:white;text-shadow:0 0 24px rgba(34,211,238,.32)}.hero-subtitle{max-width:900px;color:#cbd5e1;font-size:18px}.stat-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}.stat-chip{border:1px solid rgba(168,85,247,.28);background:rgba(15,23,42,.62);border-radius:999px;padding:9px 14px;color:#e0f2fe}.gr-button-primary{background:linear-gradient(90deg,#0891b2,#7c3aed)!important;border:0!important;box-shadow:0 0 22px rgba(34,211,238,.22)!important}.results-grid,.history-grid,.admin-grid{display:grid;gap:16px}.claim-card,.history-card{border:1px solid rgba(34,211,238,.22);background:linear-gradient(135deg,rgba(15,23,42,.82),rgba(30,41,59,.62));border-radius:22px;padding:18px;box-shadow:0 0 26px rgba(34,211,238,.08)}.evidence-card{border-color:rgba(168,85,247,.35);box-shadow:0 0 30px rgba(168,85,247,.12)}.claim-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.claim-index{color:#67e8f9;font-family:ui-monospace,monospace;font-weight:900}.topic-pill,.label-pill,.source-chip{display:inline-flex;border-radius:999px;padding:6px 10px;font-size:12px;text-decoration:none}.topic-pill{background:rgba(37,99,235,.18);color:#bfdbfe;border:1px solid rgba(59,130,246,.25)}.label-pill{background:rgba(168,85,247,.18);color:#e9d5ff;border:1px solid rgba(168,85,247,.28)}.claim-text{font-size:16px;color:#f8fafc;line-height:1.55}.meter{height:7px;border-radius:999px;background:rgba(148,163,184,.17);overflow:hidden;margin:14px 0 8px}.meter span{display:block;height:100%;background:linear-gradient(90deg,#22d3ee,#a855f7);border-radius:999px}.meta-line{color:#cbd5e1;font-size:13px;margin-bottom:12px}.sources-row{display:flex;flex-wrap:wrap;gap:8px}.source-chip{color:#cffafe!important;border:1px solid rgba(34,211,238,.24);background:rgba(8,145,178,.12)}.evidence-list{display:grid;gap:10px;margin-top:12px}.evidence-link{display:grid;gap:4px;text-decoration:none!important;color:#e0f2fe!important;border:1px solid rgba(34,211,238,.22);background:rgba(2,6,23,.36);border-radius:16px;padding:12px}.evidence-link span{color:#fff}.evidence-link small{color:#94a3b8;line-height:1.35}.evidence-link.manual{border-style:dashed;color:#fde68a!important}.caution{margin-top:12px;color:#fbbf24;font-size:12px}.empty-state{border:1px dashed rgba(148,163,184,.35);border-radius:20px;padding:24px;color:#cbd5e1;background:rgba(15,23,42,.5)}.footer-note,.history-card span,.history-card p{color:#94a3b8;font-size:13px}.archive-head{border:1px solid rgba(34,211,238,.22);border-radius:18px;padding:14px;margin-bottom:14px;background:rgba(15,23,42,.55);display:grid;gap:4px}.archive-head span{color:#94a3b8}
 """
 
 HERO = f"""
 <div id="neon-hero"><div class="hero-content">
-<div class="hero-kicker">PUBLIC CLAIM INTELLIGENCE · BULGARIA · v{APP_VERSION}</div>
+<div class="hero-kicker">HF READY · WORD-BY-WORD REALTIME · BULGARIA · v{APP_VERSION}</div>
 <div class="hero-title">ClaimRadar BG</div>
-<div class="hero-subtitle">Футуристичен публичен продукт за откриване, първична онлайн проверка, запазване и споделяне на проверки на публични твърдения.</div>
-<div class="stat-row"><span class="stat-chip">Текст → твърдения</span><span class="stat-chip">Онлайн източници</span><span class="stat-chip">Публичен архив</span><span class="stat-chip">Share ID</span><span class="stat-chip">Admin панел</span></div>
+<div class="hero-subtitle">Финална Hugging Face версия: Gradio приложение + WebSocket realtime backend на един и същ Space. Extension-ът може директно да използва <b>wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime</b>.</div>
+<div class="stat-row"><span class="stat-chip">Gradio App</span><span class="stat-chip">/ws/realtime</span><span class="stat-chip">Word stream</span><span class="stat-chip">Claim cards</span><span class="stat-chip">SRT</span><span class="stat-chip">Public archive</span></div>
 </div></div>
 """
 
@@ -513,19 +669,26 @@ with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral
         real_btn.click(real_check, text, [result_html, copy_box, status])
         save_btn.click(save_public_check, [title, text, mode], [share_id, status])
 
-    with gr.Tab("🔎 Реална проверка"):
-        gr.Markdown("Този режим опитва онлайн търсене в официални и надеждни източници. Работи най-добре с 1–8 конкретни твърдения.")
-        real_title = gr.Textbox(label="Заглавие", value="Онлайн проверка")
-        real_text = gr.Textbox(label="Твърдения за проверка", lines=10, placeholder="Пример: Инфлацията в България беше ...")
-        with gr.Row():
-            check_live = gr.Button("Провери онлайн", variant="primary")
-            save_live = gr.Button("Запази тази проверка")
-        live_status = gr.Textbox(label="Статус", value="Готов за онлайн проверка.", interactive=False)
-        live_html = gr.HTML(label="Онлайн резултати")
-        live_copy = gr.Textbox(label="Копирай проверката", lines=10, show_copy_button=True)
-        live_share = gr.Textbox(label="Share ID / статус", interactive=False)
-        check_live.click(real_check, real_text, [live_html, live_copy, live_status])
-        save_live.click(save_public_check, [real_title, real_text, gr.State("реална проверка")], [live_share, live_status])
+    with gr.Tab("🔴 Word realtime"):
+        gr.Markdown(f"""
+### Готово за extension след качване в Hugging Face
+
+WebSocket endpoint:
+
+```text
+wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime
+```
+
+Health check:
+
+```text
+{PUBLIC_BASE_URL}/health
+```
+
+Инсталация: Chrome/Edge → Developer mode → Load unpacked → избери папката `extension` → popup → backend URL → `wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime` → отвори YouTube/live → **Realtime**.
+
+На free CPU Space първото стартиране и Whisper моделът може да са бавни. За ниска латентност използвай GPU Space или VPS.
+""")
 
     with gr.Tab("🎙️ Аудио/видео"):
         gr.Markdown(f"Качи кратък файл за публичен тест. Препоръчителен лимит: до **{MAX_MEDIA_MB} MB**.")
@@ -542,13 +705,13 @@ with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral
         srt_file = gr.File(label="Свали .SRT")
         media_status = gr.Textbox(label="Статус", interactive=False)
         audio_share = gr.Textbox(label="Share ID / статус", interactive=False)
-        tr_btn.click(transcribe, media, [transcript, srt_file, media_status])
+        tr_btn.click(transcribe_file, media, [transcript, srt_file, media_status])
         full_btn.click(transcribe_and_analyze, media, [transcript, media_results, media_copy, srt_file, media_status])
         real_media_btn.click(transcribe_and_real_check, media, [transcript, media_results, media_copy, srt_file, media_status])
         save_audio_btn.click(save_public_check, [audio_title, transcript, gr.State("бърза проверка")], [audio_share, media_status])
 
     with gr.Tab("🗂️ Публичен архив"):
-        gr.Markdown("Запазените проверки получават **Share ID**. На безплатен Space записите може да изчезнат при рестарт, ако няма persistent storage.")
+        gr.Markdown("Запазените проверки получават **Share ID**. На free Space записите може да изчезнат при рестарт, ако няма persistent storage.")
         check_id = gr.Textbox(label="Зареди по Share ID")
         with gr.Row():
             load_btn = gr.Button("Зареди проверка", variant="primary")
@@ -569,11 +732,6 @@ with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral
         source_md += "\nПърво се проверяват официални първични данни. Медии и fact-check сайтове се използват като допълнителен контекст."
         gr.Markdown(source_md)
 
-    with gr.Tab("🧬 Как работи"):
-        gr.HTML("""
-<div class="claim-card"><div class="claim-text"><b>Pipeline v0.4:</b> текст/транскрипт → откриване на твърдения → категоризация → онлайн търсене → запазване → Share ID → публичен архив → admin преглед</div><div class="meter"><span style="width:94%"></span></div><div class="meta-line">Следваща версия: истински AI оценител с цитати, потребителски профили и постоянна база данни.</div></div>
-""")
-
     with gr.Tab("📡 Обратна връзка"):
         name = gr.Textbox(label="Име по избор")
         email = gr.Textbox(label="Имейл по избор")
@@ -592,5 +750,41 @@ with gr.Blocks(title=APP_TITLE, theme=gr.themes.Soft(primary_hue="cyan", neutral
 
     gr.Markdown(f"---\n{DISCLAIMER}")
 
+fastapi_app = FastAPI(title=APP_TITLE, version=APP_VERSION)
+fastapi_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@fastapi_app.get("/health")
+def health():
+    return JSONResponse({
+        "ok": True,
+        "version": APP_VERSION,
+        "model": MODEL_SIZE,
+        "device": DEVICE,
+        "compute_type": COMPUTE_TYPE,
+        "language": LANGUAGE,
+        "realtime_endpoint": "/ws/realtime",
+        "public_realtime_url": PUBLIC_BASE_URL.replace("https://", "wss://").replace("http://", "ws://") + "/ws/realtime",
+    })
+
+
+@fastapi_app.websocket("/ws/realtime")
+async def ws_realtime(websocket: WebSocket):
+    await receive_realtime(websocket, realtime=True)
+
+
+@fastapi_app.websocket("/ws/transcribe")
+async def ws_transcribe(websocket: WebSocket):
+    await receive_realtime(websocket, realtime=False)
+
+
+app = gr.mount_gradio_app(fastapi_app, demo, path="/")
+
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "7860")))
