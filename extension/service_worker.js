@@ -14,17 +14,17 @@ async function setupOffscreenDocument() {
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_DOCUMENT_PATH,
     reasons: ['USER_MEDIA'],
-    justification: 'Capture current tab audio for user-started Bulgarian speech-to-text transcription.'
+    justification: 'Capture current tab audio for user-started Bulgarian realtime speech-to-text transcription.'
   });
 }
 
 async function getDefaultConfig() {
-  const stored = await chrome.storage.sync.get({
-    backendUrl: 'ws://127.0.0.1:7861/ws/transcribe',
-    chunkMs: 4000,
-    autoSendToOverlay: true
+  return await chrome.storage.sync.get({
+    backendUrl: 'ws://127.0.0.1:7861/ws/realtime',
+    chunkMs: 1200,
+    autoSendToOverlay: true,
+    realtimeMode: true
   });
-  return stored;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -49,7 +49,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         streamId,
         tabId: sender.tab?.id,
         backendUrl: message.backendUrl || config.backendUrl,
-        chunkMs: Number(message.chunkMs || config.chunkMs || 4000)
+        chunkMs: Number(message.chunkMs || config.chunkMs || 1200),
+        realtimeMode: Boolean(message.realtimeMode ?? config.realtimeMode)
       });
       sendResponse({ ok: true });
       return;
