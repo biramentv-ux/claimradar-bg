@@ -10,7 +10,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     REALTIME_INTERVAL=2.2 \
     ROLLING_WINDOW_MB=12 \
     STREAM_MAX_BUFFER_MB=60 \
-    MAX_MEDIA_MB=80
+    MAX_MEDIA_MB=80 \
+    DB_ENABLED=1 \
+    DB_SSLMODE=require
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg curl \
@@ -26,4 +28,4 @@ COPY . /app
 
 EXPOSE 7860
 
-CMD ["python", "launch.py"]
+CMD ["python", "persistent_launch.py"]
