@@ -1,6 +1,6 @@
-# ClaimRadar BG Overlay Extension v2.2
+# ClaimRadar BG Overlay Extension v2.3
 
-Chrome/Edge extension prototype за live Bulgarian public-claim detection с polished overlay, captions/audio режими, local history и Hugging Face realtime backend.
+Chrome/Edge extension prototype за live Bulgarian public-claim detection с polished overlay, captions/audio режими, local history, packaging script и Hugging Face realtime backend.
 
 ## Какво прави
 
@@ -20,6 +20,56 @@ Chrome/Edge extension prototype за live Bulgarian public-claim detection с po
 - пази local history в browser storage;
 - поддържа tab audio capture към WebSocket backend;
 - показва live word stream и live claim cards от streaming backend.
+
+## Packaging
+
+Extension package се прави със стандартен Python script без външни зависимости:
+
+```bash
+python scripts/package_extension.py
+```
+
+Скриптът:
+
+- генерира PNG icons в `extension/icons/`;
+- валидира задължителните файлове;
+- проверява icons в `manifest.json`;
+- създава ZIP в `dist/`.
+
+Изходният файл е:
+
+```text
+dist/claimradar-bg-extension-v2.3.0.zip
+```
+
+## GitHub Actions artifact
+
+Workflow:
+
+```text
+.github/workflows/build-extension.yml
+```
+
+Той се стартира при промени в `extension/**`, packaging script-а или ръчно от Actions → **Build Extension Package**.
+
+След успешен run ZIP файлът се взима от Artifacts:
+
+```text
+claimradar-bg-extension
+```
+
+## Store readiness файлове
+
+Добавени са:
+
+```text
+extension/PRIVACY_POLICY.md
+extension/STORE_LISTING_BG.md
+```
+
+`PRIVACY_POLICY.md` описва какви данни extension-ът обработва, какво се пази локално и кога се праща към backend.
+
+`STORE_LISTING_BG.md` съдържа draft описание, permissions explanation и списък със screenshots, които трябва да се подготвят преди Chrome Web Store / Edge Add-ons submission.
 
 ## Инсталация локално
 
@@ -53,28 +103,6 @@ claimradar-bg/extension
 7. След всяка промяна в extension файловете натисни **Reload** на extension-а в `chrome://extensions`.
 8. Отвори YouTube видео с captions/transcript или маркирай текст на произволна страница.
 
-## Popup настройки
-
-В popup-а можеш да управляваш:
-
-- Overlay включен / изключен;
-- Floating mini mode;
-- Auto-open YouTube transcript;
-- Auto-start в YouTube;
-- режим на анализ:
-  - `captions`;
-  - `audio`;
-  - `selection`;
-- WebSocket backend URL;
-- audio chunk milliseconds;
-- local history.
-
-По подразбиране production backend е:
-
-```text
-wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime
-```
-
 ## Audio режим
 
 1. Избери `Audio realtime` в popup-а или натисни **Realtime** в overlay-а.
@@ -83,11 +111,6 @@ wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime
 4. Аудиото се изпраща на chunks към WebSocket backend.
 5. Backend-ът транскрибира `.webm` buffer чрез Faster Whisper.
 6. Overlay-ът показва live word stream + claim cards.
-
-## Local history
-
-Extension-ът пази последните анализи/report-и в `chrome.storage.local`.
-От popup-а можеш да видиш последните записи и да ги изчистиш.
 
 ## Ограничения
 
