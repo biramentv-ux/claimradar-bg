@@ -16,6 +16,7 @@ def test_required_project_files_exist():
         "db_storage.py",
         "security_jobs.py",
         "jobs_api.py",
+        "persistent_jobs.py",
         "monitoring.py",
         "search_providers.py",
         "Dockerfile",
