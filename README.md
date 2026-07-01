@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Финална Hugging Face-ready версия за България: Docker Space с Gradio интерфейс, публичен архив, browser extension, realtime WebSocket backend, AI verdict engine, Search API слой, публични result pages, privacy controls, security/rate limiting, background jobs, social metadata и продуктова информационна страница.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, security/rate limiting, background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
@@ -19,6 +19,9 @@ license: mit
 /
 /product
 /health
+/db/status
+/api/db/status
+/api/db/schema
 /security/status
 /search/status
 /sources/whitelist
@@ -28,101 +31,91 @@ license: mit
 /api/check/<share_id>
 ```
 
-## Версия 2.6 — Rate Limiting, Security, Background Jobs
+## Версия 2.7 — Supabase/PostgreSQL Persistent Storage
 
 Добавено:
 
-- нов файл `security_jobs.py`;
-- FastAPI middleware за rate limiting;
-- security headers;
-- request size guard;
-- отделни лимити за public/API/heavy/abuse routes;
-- background job store;
-- ThreadPoolExecutor workers;
-- JSONL job persistence в `data/jobs.jsonl`;
-- endpoint `/security/status`;
-- endpoint `GET /api/jobs`;
-- endpoint `GET /api/jobs/<job_id>`;
-- endpoint `POST /api/jobs/check`;
-- endpoint `POST /api/jobs/ai-verdict`;
-- endpoint `POST /api/jobs/real-check`.
+- `supabase/schema.sql` — SQL schema за Supabase/PostgreSQL;
+- `db_storage.py` — Postgres adapter с JSONL fallback;
+- `persistent_launch.py` — wrapper, който patch-ва JSONL записите към Postgres;
+- Dockerfile вече стартира `persistent_launch.py`;
+- `psycopg[binary]` е добавен в `requirements.txt`;
+- `/db/status` и `/api/db/status`;
+- `/api/db/schema` за преглед на SQL схемата;
+- `POST /api/db/migrate-jsonl` за миграция на старите JSONL записи към Postgres;
+- JSONL остава като backup/fallback, ако базата не е конфигурирана.
 
-### Security variables
+## Database variables
+
+Добави като Hugging Face Secret:
 
 ```bash
-RATE_LIMIT_ENABLED=1
-SECURITY_HEADERS_ENABLED=1
-MAX_REQUEST_BYTES=26214400
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_DEFAULT=120
-RATE_LIMIT_API=60
-RATE_LIMIT_HEAVY=12
-RATE_LIMIT_ABUSE=6
-JOB_WORKERS=2
-JOB_MAX_TEXT_CHARS=12000
-JOB_RETENTION=500
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/postgres?sslmode=require
 ```
 
-## Версия 2.5 — Privacy, Metadata, Social Preview, Abuse Reports
+Алтернативни имена, които също се разпознават:
 
-Добавено:
+```bash
+SUPABASE_DB_URL=...
+POSTGRES_URL=...
+```
 
-- public/private visibility слой за запазени проверки;
-- admin toggle за `public` / `private` от публичната result page;
-- private checks връщат 403 публично;
-- canonical metadata за `/product` и `/check/<share_id>`;
-- Open Graph metadata;
-- Twitter card metadata;
-- dynamic social preview SVG image чрез `/social-preview.svg`;
-- бутон **Report abuse** на публичните result pages;
-- endpoint `POST /api/report-abuse`;
-- abuse reports се записват в `data/abuse_reports.jsonl` и се дублират към feedback stream;
-- endpoint `POST /api/check/<share_id>/visibility` за admin visibility промяна.
+Препоръчителни variables:
 
-## Рапорт
+```bash
+DB_ENABLED=1
+DB_SSLMODE=require
+```
 
-Подробният технически рапорт е в:
+## Supabase setup
+
+1. Създай Supabase project.
+2. Отвори SQL Editor.
+3. Пусни съдържанието на:
 
 ```text
-PROJECT_REPORT_BG.md
+supabase/schema.sql
 ```
 
-## Версия 2.4 — Product Page + Project Report
+4. В Hugging Face Secrets добави `DATABASE_URL`.
+5. Restart Space.
+6. Провери:
+
+```text
+/db/status
+```
+
+7. Мигрирай старите JSONL записи към Postgres:
+
+```text
+POST /api/db/migrate-jsonl
+```
+
+Body:
+
+```json
+{
+  "admin_key": "YOUR_ADMIN_KEY"
+}
+```
+
+## Версия 2.6 — Security и Background Jobs
 
 Добавено:
 
-- route `/product`;
-- публична продуктова страница за крайни потребители;
-- технически рапорт `PROJECT_REPORT_BG.md`;
-- линк към `/product` от публичните result pages.
-
-## Версия 2.3 — Search API + Public Result Pages
-
-Добавено:
-
-- search provider слой в `search_providers.py`;
-- Brave Search API;
-- Bing Search API;
-- Tavily;
-- SerpAPI;
-- Google Programmable Search / CSE;
-- DuckDuckGo fallback;
-- whitelist филтър за надеждни източници;
-- endpoint `/search/status`;
-- endpoint `/sources/whitelist`;
-- JSON endpoint `/api/check/<share_id>`;
-- публична страница `/check/<share_id>`.
+- `security_jobs.py`;
+- rate limiting middleware;
+- security headers;
+- request size guard;
+- background job store;
+- `/security/status`;
+- `/api/jobs/*`.
 
 ## Search API настройки
 
 ```bash
 SEARCH_PROVIDER=auto
 SEARCH_STRICT_WHITELIST=1
-```
-
-Поддържани secrets/variables:
-
-```bash
 BRAVE_SEARCH_API_KEY=...
 BING_SEARCH_API_KEY=...
 TAVILY_API_KEY=...
@@ -131,76 +124,12 @@ GOOGLE_SEARCH_API_KEY=...
 GOOGLE_CSE_ID=...
 ```
 
-Whitelist източници:
-
-```text
-nsi.bg
-bnb.bg
-nssi.bg
-nra.bg
-cik.bg
-parliament.bg
-dv.parliament.bg
-minfin.bg
-gov.bg
-ec.europa.eu
-factcheck.bg
-bta.bg
-bnr.bg
-```
-
-## Версия 2.2 — AI Verdict Engine
-
-- tab **🧠 AI verdict**;
-- pipeline: `claim → evidence search → AI сравнение → verdict → цитати`;
-- verdict-и: `Вярно`, `По-скоро вярно`, `Частично вярно`, `Подвеждащо`, `Невярно`, `Непроверимо`, `Нужен контекст`;
-- confidence score;
-- fallback режим, ако няма `OPENAI_API_KEY`.
-
 ## AI настройки
 
 ```bash
 OPENAI_API_KEY=your-key-here
 OPENAI_MODEL=gpt-4o-mini
 ```
-
-## Docker Space
-
-Проектът използва **FastAPI + Gradio + WebSocket** в един процес и трябва да е Hugging Face **Docker Space**.
-
-```yaml
-sdk: docker
-app_port: 7860
-```
-
-`Dockerfile` стартира:
-
-```bash
-python launch.py
-```
-
-## Готово за Hugging Face
-
-След build приложението дава:
-
-- публичен Gradio интерфейс;
-- `/product` продуктова страница;
-- `/security/status` security статус;
-- `/api/jobs/*` background jobs;
-- `/social-preview.svg` social preview image;
-- `/health` endpoint;
-- `/search/status` endpoint;
-- `/sources/whitelist` endpoint;
-- `/check/<share_id>` public/private result page;
-- `/api/check/<share_id>` JSON result;
-- `/api/report-abuse` report endpoint;
-- `/ws/realtime` WebSocket endpoint;
-- AI verdict + цитати;
-- Search API слой;
-- audio/video transcription;
-- `.srt` export;
-- публичен архив със Share ID;
-- feedback и animated admin панел.
 
 ## Hugging Face Variables
 
@@ -228,6 +157,16 @@ JOB_WORKERS=2
 JOB_MAX_TEXT_CHARS=12000
 JOB_RETENTION=500
 ADMIN_KEY=your-secret-admin-key
+DB_ENABLED=1
+DB_SSLMODE=require
+```
+
+## Рапорт
+
+Подробният технически рапорт е в:
+
+```text
+PROJECT_REPORT_BG.md
 ```
 
 ## Дисклеймър
