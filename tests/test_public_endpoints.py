@@ -74,3 +74,46 @@ def test_manual_monitoring_event_requires_admin():
     )
     assert allowed.status_code == 200
     assert allowed.json()["ok"] is True
+
+
+def test_jobs_dashboard_and_stats():
+    dashboard = client.get("/jobs")
+    assert dashboard.status_code == 200
+    assert "Jobs Dashboard" in dashboard.text
+
+    stats = client.get("/api/jobs/stats")
+    assert stats.status_code == 200
+    assert stats.json()["ok"] is True
+    assert "stats" in stats.json()
+
+
+def test_create_get_cancel_and_retry_job():
+    created = client.post("/api/jobs/check", json={"text": "Инфлацията през 2024 година е 10 процента."})
+    assert created.status_code == 200
+    data = created.json()
+    assert data["ok"] is True
+    job_id = data["job_id"]
+
+    fetched = client.get(f"/api/jobs/{job_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["job"]["id"] == job_id
+
+    denied_cancel = client.post(f"/api/jobs/{job_id}/cancel", json={})
+    assert denied_cancel.status_code == 403
+
+    cancel = client.post(f"/api/jobs/{job_id}/cancel", json={"admin_key": "test-admin-key"})
+    assert cancel.status_code == 200
+    assert cancel.json()["ok"] is True
+
+    retry = client.post(f"/api/jobs/{job_id}/retry", json={"admin_key": "test-admin-key"})
+    assert retry.status_code in {200, 400}
+    assert retry.json()["ok"] in {True, False}
+
+
+def test_jobs_cleanup_requires_admin():
+    denied = client.post("/api/jobs/cleanup", json={"keep": 100})
+    assert denied.status_code == 403
+
+    allowed = client.post("/api/jobs/cleanup", json={"admin_key": "test-admin-key", "keep": 100})
+    assert allowed.status_code == 200
+    assert allowed.json()["ok"] is True
