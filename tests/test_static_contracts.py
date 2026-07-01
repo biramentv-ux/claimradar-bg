@@ -15,6 +15,7 @@ def test_required_project_files_exist():
         "persistent_launch.py",
         "db_storage.py",
         "security_jobs.py",
+        "jobs_api.py",
         "monitoring.py",
         "search_providers.py",
         "Dockerfile",
@@ -55,7 +56,11 @@ def test_readme_documents_current_public_endpoints():
         "/db/status",
         "/monitoring/status",
         "/monitoring/metrics",
+        "/jobs",
         "/api/jobs",
+        "/api/jobs/stats",
+        "/api/jobs/<job_id>/cancel",
+        "/api/jobs/<job_id>/retry",
         "/check/<share_id>",
     ]:
         assert endpoint in readme
