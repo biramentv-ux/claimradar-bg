@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, monitoring/logging, automated tests, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
@@ -19,6 +19,11 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /
 /product
 /jobs
+/auth/status
+/api/auth/status
+/api/auth/whoami
+/api/auth/roles
+/api/auth/check
 /about
 /methodology
 /privacy
@@ -51,57 +56,64 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
+## Версия 3.3 — Auth и Admin Roles
+
+Добавено:
+
+- `auth_roles.py`;
+- `auth_launch.py`;
+- Dockerfile стартира `auth_launch.py`;
+- роли: `anonymous`, `viewer`, `moderator`, `admin`, `owner`;
+- permission map за роли;
+- support за `Authorization: Bearer`, `x-api-key`, `x-admin-key`, `x-claimradar-admin-key` и query token;
+- `/auth/status`;
+- `/api/auth/status`;
+- `/api/auth/whoami`;
+- `/api/auth/roles`;
+- `POST /api/auth/check`;
+- съвместимост със стария `ADMIN_KEY`;
+- route shadowing за jobs/rate-limit/db admin actions през новия auth wrapper;
+- smoke tests за roles, whoami и auth check.
+
+### Auth variables
+
+```bash
+AUTH_ENABLED=1
+AUTH_TOKEN_SALT=random-long-string
+OWNER_KEY=...
+ADMIN_KEY=...
+MODERATOR_KEY=...
+VIEWER_KEY=...
+```
+
+### Advanced auth map
+
+`AUTH_KEYS_JSON` позволява няколко ключа с различни роли:
+
+```json
+{
+  "main-admin": {"role": "admin", "key": "..."},
+  "factcheck-editor": {"role": "moderator", "key": "..."},
+  "readonly-user": {"role": "viewer", "key": "..."}
+}
+```
+
 ## Версия 3.2 — Advanced Rate Limiting
 
 Добавено:
 
 - per-scope rate limits;
-- hashed client identity вместо директно пазене на IP в buckets;
-- `X-RateLimit-Limit` response header;
-- `X-RateLimit-Remaining` response header;
-- `X-RateLimit-Reset` response header;
-- `X-RateLimit-Scope` response header;
+- hashed client identity;
+- `X-RateLimit-Limit`;
+- `X-RateLimit-Remaining`;
+- `X-RateLimit-Reset`;
+- `X-RateLimit-Scope`;
 - `Retry-After` при 429;
-- temporary ban след твърде много нарушения;
-- admin bypass чрез query или admin header;
+- temporary ban;
+- admin bypass;
 - `/rate-limit/status`;
 - `/api/rate-limit/status`;
-- admin-protected `POST /api/rate-limit/reset`;
-- tests за rate limit status/reset endpoints.
-
-### Rate limit scopes
-
-```text
-public
-api
-jobs
-websocket
-search
-admin
-abuse
-status
-default
-```
-
-### Rate limit variables
-
-```bash
-RATE_LIMIT_ENABLED=1
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_DEFAULT=120
-RATE_LIMIT_PUBLIC=180
-RATE_LIMIT_API=60
-RATE_LIMIT_JOBS=20
-RATE_LIMIT_WS=20
-RATE_LIMIT_SEARCH=45
-RATE_LIMIT_ADMIN=30
-RATE_LIMIT_ABUSE=6
-RATE_LIMIT_STATUS=60
-RATE_LIMIT_BAN_THRESHOLD=8
-RATE_LIMIT_BAN_SECONDS=300
-RATE_LIMIT_ADMIN_BYPASS=1
-RATE_LIMIT_HASH_SALT=replace-with-random-string
-```
+- admin-protected `POST /api/rate-limit/reset`.
 
 ## Версия 3.1 — Enhanced Background Jobs
 
@@ -123,18 +135,6 @@ RATE_LIMIT_HASH_SALT=replace-with-random-string
 
 ## Версия 3.0 — Automated Tests
 
-Добавено:
-
-- `requirements-dev.txt`;
-- `pytest.ini`;
-- `tests/test_static_contracts.py`;
-- `tests/test_packaging.py`;
-- `tests/test_storage_and_monitoring.py`;
-- `tests/test_public_endpoints.py`;
-- `.github/workflows/tests.yml`.
-
-Локално:
-
 ```bash
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
@@ -142,8 +142,6 @@ pytest
 ```
 
 ## Версия 2.9 — Monitoring и Logging
-
-Добавено:
 
 - `monitoring.py`;
 - request logging middleware;
@@ -157,8 +155,6 @@ pytest
 
 ## Версия 2.8 — Legal и Methodology Pages
 
-Добавено:
-
 - `/about`;
 - `/methodology`;
 - `/privacy`;
@@ -170,12 +166,9 @@ pytest
 
 ## Версия 2.7 — Supabase/PostgreSQL Persistent Storage
 
-Добавено:
-
 - `supabase/schema.sql`;
 - `db_storage.py`;
 - `persistent_launch.py`;
-- Dockerfile стартира `persistent_launch.py`;
 - `psycopg[binary]`;
 - `/db/status` и `/api/db/status`;
 - `/api/db/schema`;
@@ -197,6 +190,20 @@ DB_SSLMODE=require
 ```bash
 SECURITY_HEADERS_ENABLED=1
 MAX_REQUEST_BYTES=26214400
+RATE_LIMIT_ENABLED=1
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_PUBLIC=180
+RATE_LIMIT_API=60
+RATE_LIMIT_JOBS=20
+RATE_LIMIT_WS=20
+RATE_LIMIT_SEARCH=45
+RATE_LIMIT_ADMIN=30
+RATE_LIMIT_ABUSE=6
+RATE_LIMIT_STATUS=60
+RATE_LIMIT_BAN_THRESHOLD=8
+RATE_LIMIT_BAN_SECONDS=300
+RATE_LIMIT_ADMIN_BYPASS=1
+RATE_LIMIT_HASH_SALT=random-long-string
 JOB_WORKERS=2
 JOB_MAX_TEXT_CHARS=12000
 JOB_RETENTION=500
@@ -207,7 +214,6 @@ REQUEST_LOG_BODY=0
 MONITORING_RECENT_LIMIT=200
 MONITORING_SLOW_MS=2500
 MONITORING_LOG_FILE=data/system_events.jsonl
-ADMIN_KEY=your-admin-key
 ```
 
 ## Search API настройки
@@ -226,7 +232,7 @@ GOOGLE_CSE_ID=...
 ## AI настройки
 
 ```bash
-OPENAI_API_KEY=your-key-here
+OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-4o-mini
 ```
 
