@@ -12,6 +12,7 @@ from db_storage import storage
 from jobs_api import register_job_routes
 from monitoring import MonitoringMiddleware, log_custom_event, monitoring_status, public_metrics, read_events
 from persistent_jobs import patch_job_store_persistence
+from rate_limit_api import register_rate_limit_routes
 from security_jobs import SecurityAndRateLimitMiddleware
 
 _original_append_jsonl = app_module.append_jsonl
@@ -42,7 +43,7 @@ app_module.append_jsonl = db_aware_append_jsonl
 app_module.read_jsonl = db_aware_read_jsonl
 patch_job_store_persistence(base_launch.job_store, storage)
 
-outer_app = FastAPI(title="ClaimRadar BG Persistent Layer", version="3.1-background-jobs-controls")
+outer_app = FastAPI(title="ClaimRadar BG Persistent Layer", version="3.2-advanced-rate-limiting")
 outer_app.add_middleware(SecurityAndRateLimitMiddleware)
 outer_app.add_middleware(MonitoringMiddleware)
 
@@ -191,6 +192,8 @@ async def db_migrate_jsonl(request: Request):
     counts = migrate_jsonl_to_db()
     return JSONResponse({"ok": True, "migrated": counts, "db": storage.status()})
 
+
+register_rate_limit_routes(outer_app, can_admin)
 
 register_job_routes(
     outer_app,
