@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, monitoring/logging, security/rate limiting, background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, monitoring/logging, automated tests, security/rate limiting, background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
@@ -42,6 +42,67 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
+## Версия 3.0 — Automated Tests
+
+Добавено:
+
+- `requirements-dev.txt`;
+- `pytest.ini`;
+- `tests/test_static_contracts.py`;
+- `tests/test_packaging.py`;
+- `tests/test_storage_and_monitoring.py`;
+- `tests/test_public_endpoints.py`;
+- `.github/workflows/tests.yml`.
+
+Тестовете покриват:
+
+- основни project files;
+- Supabase schema contract;
+- README endpoint documentation;
+- Extension Manifest V3 contract;
+- extension packaging script;
+- generated PNG icons;
+- Postgres storage adapter fallback;
+- monitoring metrics/event logger;
+- FastAPI smoke endpoints:
+  - `/db/status`;
+  - `/api/db/schema`;
+  - `/monitoring/status`;
+  - `/monitoring/metrics`;
+  - `/monitoring/logs`;
+  - `/api/monitoring/event`;
+  - `/about`;
+  - `/methodology`;
+  - `/privacy`;
+  - `/terms`;
+  - `/sources`;
+  - `/contact`;
+  - `/legal-methodology.md`.
+
+### Run tests locally
+
+```bash
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+pytest
+```
+
+### Run extension packaging test
+
+```bash
+python scripts/package_extension.py
+```
+
+### GitHub Actions
+
+Workflow:
+
+```text
+.github/workflows/tests.yml
+```
+
+Той се стартира при push към `main`, pull request към `main` и ръчно чрез `workflow_dispatch`.
+
 ## Версия 2.9 — Monitoring и Logging
 
 Добавено:
@@ -61,17 +122,6 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - `/monitoring/metrics`;
 - admin-protected `/monitoring/logs`;
 - admin-protected `POST /api/monitoring/event`.
-
-### Monitoring variables
-
-```bash
-MONITORING_ENABLED=1
-REQUEST_LOG_ENABLED=1
-REQUEST_LOG_BODY=0
-MONITORING_RECENT_LIMIT=200
-MONITORING_SLOW_MS=2500
-MONITORING_LOG_FILE=data/system_events.jsonl
-```
 
 ## Версия 2.8 — Legal и Methodology Pages
 
