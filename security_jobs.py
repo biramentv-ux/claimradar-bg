@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import os
 import time
@@ -16,29 +18,44 @@ SECURITY_HEADERS_ENABLED = os.getenv("SECURITY_HEADERS_ENABLED", "1").lower() no
 MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", str(25 * 1024 * 1024)))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 RATE_LIMIT_DEFAULT = int(os.getenv("RATE_LIMIT_DEFAULT", "120"))
+RATE_LIMIT_PUBLIC = int(os.getenv("RATE_LIMIT_PUBLIC", "180"))
 RATE_LIMIT_API = int(os.getenv("RATE_LIMIT_API", "60"))
 RATE_LIMIT_HEAVY = int(os.getenv("RATE_LIMIT_HEAVY", "12"))
 RATE_LIMIT_ABUSE = int(os.getenv("RATE_LIMIT_ABUSE", "6"))
+RATE_LIMIT_JOBS = int(os.getenv("RATE_LIMIT_JOBS", "20"))
+RATE_LIMIT_WS = int(os.getenv("RATE_LIMIT_WS", "20"))
+RATE_LIMIT_SEARCH = int(os.getenv("RATE_LIMIT_SEARCH", "45"))
+RATE_LIMIT_ADMIN = int(os.getenv("RATE_LIMIT_ADMIN", "30"))
+RATE_LIMIT_STATUS = int(os.getenv("RATE_LIMIT_STATUS", "60"))
+RATE_LIMIT_BAN_THRESHOLD = int(os.getenv("RATE_LIMIT_BAN_THRESHOLD", "8"))
+RATE_LIMIT_BAN_SECONDS = int(os.getenv("RATE_LIMIT_BAN_SECONDS", "300"))
+RATE_LIMIT_ADMIN_BYPASS = os.getenv("RATE_LIMIT_ADMIN_BYPASS", "1").lower() not in {"0", "false", "no"}
+RATE_LIMIT_HASH_SALT = os.getenv("RATE_LIMIT_HASH_SALT", "claimradar-bg-rate-limit")
 JOB_WORKERS = int(os.getenv("JOB_WORKERS", "2"))
 JOB_RETENTION = int(os.getenv("JOB_RETENTION", "500"))
 JOB_RESULT_MAX_CHARS = int(os.getenv("JOB_RESULT_MAX_CHARS", "50000"))
 
-HEAVY_PREFIXES = (
-    "/api/jobs",
-    "/api/report-abuse",
-    "/api/check/",
-    "/ws/",
-)
-PUBLIC_PREFIXES = (
-    "/check/",
-    "/product",
-    "/social-preview.svg",
-    "/sources/whitelist",
-    "/search/status",
-    "/health",
-)
 TERMINAL_STATUSES = {"done", "failed", "cancelled"}
 RUNNING_STATUSES = {"queued", "running"}
+PUBLIC_PAGE_PREFIXES = (
+    "/check/",
+    "/product",
+    "/about",
+    "/methodology",
+    "/privacy",
+    "/terms",
+    "/sources",
+    "/contact",
+    "/legal-methodology.md",
+    "/social-preview.svg",
+    "/health",
+)
+ADMIN_PREFIXES = (
+    "/monitoring/logs",
+    "/api/monitoring/event",
+    "/api/db/migrate-jsonl",
+    "/api/rate-limit/reset",
+)
 
 
 def client_ip(request: Request) -> str:
@@ -51,30 +68,197 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def admin_key_from_request(request: Request) -> str:
+    return (
+        request.headers.get("x-admin-key")
+        or request.headers.get("x-claimradar-admin-key")
+        or request.query_params.get("admin_key")
+        or ""
+    )
+
+
+def configured_admin_key() -> str:
+    return os.getenv("ADMIN_KEY", "")
+
+
+def safe_identity(raw_identity: str) -> str:
+    secret = RATE_LIMIT_HASH_SALT.encode("utf-8", errors="ignore")
+    msg = (raw_identity or "unknown").encode("utf-8", errors="ignore")
+    return hmac.new(secret, msg, hashlib.sha256).hexdigest()[:18]
+
+
 class InMemoryRateLimiter:
     def __init__(self):
         self.hits: Dict[str, deque] = defaultdict(deque)
+        self.violations: Dict[str, int] = defaultdict(int)
+        self.banned_until: Dict[str, float] = {}
+        self.scope_counts: Counter = Counter()
+        self.rejected_total = 0
+        self.allowed_total = 0
 
-    def limit_for_path(self, path: str) -> int:
+    def scope_for_path(self, path: str) -> str:
         if path.startswith("/api/report-abuse"):
-            return RATE_LIMIT_ABUSE
+            return "abuse"
+        if path.startswith("/api/jobs") or path == "/jobs":
+            return "jobs"
+        if path.startswith("/ws/"):
+            return "websocket"
+        if path.startswith("/search/") or path.startswith("/sources/whitelist"):
+            return "search"
+        if path.startswith("/monitoring/status") or path.startswith("/monitoring/metrics") or path.startswith("/rate-limit/status"):
+            return "status"
+        if any(path.startswith(prefix) for prefix in ADMIN_PREFIXES) or path.endswith("/visibility"):
+            return "admin"
         if path.startswith("/api/"):
-            return RATE_LIMIT_API
-        if any(path.startswith(prefix) for prefix in HEAVY_PREFIXES):
-            return RATE_LIMIT_HEAVY
-        return RATE_LIMIT_DEFAULT
+            return "api"
+        if any(path.startswith(prefix) for prefix in PUBLIC_PAGE_PREFIXES):
+            return "public"
+        return "default"
 
-    def check(self, key: str, path: str) -> tuple[bool, int, int]:
+    def limit_for_scope(self, scope: str) -> int:
+        return {
+            "abuse": RATE_LIMIT_ABUSE,
+            "jobs": RATE_LIMIT_JOBS,
+            "websocket": RATE_LIMIT_WS,
+            "search": RATE_LIMIT_SEARCH,
+            "admin": RATE_LIMIT_ADMIN,
+            "api": RATE_LIMIT_API,
+            "public": RATE_LIMIT_PUBLIC,
+            "status": RATE_LIMIT_STATUS,
+            "default": RATE_LIMIT_DEFAULT,
+        }.get(scope, RATE_LIMIT_DEFAULT)
+
+    def make_key(self, request: Request, scope: str) -> str:
+        ip_hash = safe_identity(client_ip(request))
+        return f"{ip_hash}:{scope}"
+
+    def check(self, request: Request) -> Dict[str, Any]:
         now = time.time()
-        limit = self.limit_for_path(path)
+        path = request.url.path
+        scope = self.scope_for_path(path)
+        limit = self.limit_for_scope(scope)
+        key = self.make_key(request, scope)
         bucket = self.hits[key]
+
+        if key in self.banned_until:
+            until = self.banned_until[key]
+            if until > now:
+                retry_after = int(max(1, until - now))
+                self.rejected_total += 1
+                return {
+                    "allowed": False,
+                    "reason": "temporary_ban",
+                    "key": key,
+                    "scope": scope,
+                    "limit": limit,
+                    "remaining": 0,
+                    "retry_after": retry_after,
+                    "reset": retry_after,
+                    "banned_until": int(until),
+                }
+            self.banned_until.pop(key, None)
+            self.violations[key] = 0
+
         while bucket and bucket[0] <= now - RATE_LIMIT_WINDOW_SECONDS:
             bucket.popleft()
+
+        reset = int(RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0])) if bucket else RATE_LIMIT_WINDOW_SECONDS
         if len(bucket) >= limit:
-            reset = int(RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0])) if bucket else RATE_LIMIT_WINDOW_SECONDS
-            return False, max(0, reset), limit
+            self.violations[key] += 1
+            self.rejected_total += 1
+            reason = "rate_limited"
+            retry_after = max(1, reset)
+            if RATE_LIMIT_BAN_THRESHOLD > 0 and self.violations[key] >= RATE_LIMIT_BAN_THRESHOLD:
+                self.banned_until[key] = now + RATE_LIMIT_BAN_SECONDS
+                retry_after = RATE_LIMIT_BAN_SECONDS
+                reason = "temporary_ban"
+            return {
+                "allowed": False,
+                "reason": reason,
+                "key": key,
+                "scope": scope,
+                "limit": limit,
+                "remaining": 0,
+                "retry_after": retry_after,
+                "reset": retry_after,
+                "violations": self.violations[key],
+                "banned_until": int(self.banned_until.get(key, 0) or 0),
+            }
+
         bucket.append(now)
-        return True, 0, limit
+        self.allowed_total += 1
+        self.scope_counts[scope] += 1
+        remaining = max(0, limit - len(bucket))
+        return {
+            "allowed": True,
+            "reason": "ok",
+            "key": key,
+            "scope": scope,
+            "limit": limit,
+            "remaining": remaining,
+            "retry_after": 0,
+            "reset": max(1, reset),
+            "violations": self.violations.get(key, 0),
+        }
+
+    def headers(self, decision: Dict[str, Any]) -> Dict[str, str]:
+        return {
+            "X-RateLimit-Limit": str(decision.get("limit", 0)),
+            "X-RateLimit-Remaining": str(decision.get("remaining", 0)),
+            "X-RateLimit-Reset": str(decision.get("reset", 0)),
+            "X-RateLimit-Scope": str(decision.get("scope", "default")),
+        }
+
+    def reset(self, identity_hash: str = "", scope: str = "", all_keys: bool = False) -> Dict[str, Any]:
+        if all_keys:
+            removed = len(self.hits)
+            self.hits.clear()
+            self.violations.clear()
+            self.banned_until.clear()
+            return {"removed": removed, "mode": "all"}
+        suffix = f":{scope}" if scope else ""
+        keys = list(self.hits.keys())
+        removed = 0
+        for key in keys:
+            if identity_hash and not key.startswith(identity_hash):
+                continue
+            if suffix and not key.endswith(suffix):
+                continue
+            self.hits.pop(key, None)
+            self.violations.pop(key, None)
+            self.banned_until.pop(key, None)
+            removed += 1
+        return {"removed": removed, "mode": "filtered", "identity_hash": identity_hash, "scope": scope}
+
+    def status(self) -> Dict[str, Any]:
+        now = time.time()
+        active_buckets = {key: len(bucket) for key, bucket in self.hits.items() if bucket}
+        banned = {key: int(until - now) for key, until in self.banned_until.items() if until > now}
+        return {
+            "enabled": RATE_LIMIT_ENABLED,
+            "window_seconds": RATE_LIMIT_WINDOW_SECONDS,
+            "limits": {
+                "default": RATE_LIMIT_DEFAULT,
+                "public": RATE_LIMIT_PUBLIC,
+                "api": RATE_LIMIT_API,
+                "jobs": RATE_LIMIT_JOBS,
+                "websocket": RATE_LIMIT_WS,
+                "search": RATE_LIMIT_SEARCH,
+                "admin": RATE_LIMIT_ADMIN,
+                "abuse": RATE_LIMIT_ABUSE,
+                "status": RATE_LIMIT_STATUS,
+            },
+            "ban_threshold": RATE_LIMIT_BAN_THRESHOLD,
+            "ban_seconds": RATE_LIMIT_BAN_SECONDS,
+            "admin_bypass": RATE_LIMIT_ADMIN_BYPASS,
+            "active_bucket_count": len(active_buckets),
+            "banned_count": len(banned),
+            "violations_count": sum(self.violations.values()),
+            "allowed_total": self.allowed_total,
+            "rejected_total": self.rejected_total,
+            "scope_counts": dict(self.scope_counts),
+            "banned_remaining_seconds": banned,
+        }
 
 
 rate_limiter = InMemoryRateLimiter()
@@ -90,18 +274,36 @@ class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
                 status_code=413,
             )
 
+        rate_decision: Dict[str, Any] | None = None
+        admin_bypass = False
         if RATE_LIMIT_ENABLED:
-            ip = client_ip(request)
-            key = f"{ip}:{path.split('/')[1] if len(path.split('/')) > 1 else 'root'}"
-            allowed, retry_after, limit = rate_limiter.check(key, path)
-            if not allowed:
-                return JSONResponse(
-                    {"ok": False, "error": "rate_limited", "retry_after_seconds": retry_after, "limit_per_window": limit},
-                    status_code=429,
-                    headers={"Retry-After": str(retry_after)},
-                )
+            admin_key = admin_key_from_request(request)
+            configured = configured_admin_key()
+            admin_bypass = bool(RATE_LIMIT_ADMIN_BYPASS and configured and admin_key == configured)
+            if not admin_bypass:
+                rate_decision = rate_limiter.check(request)
+                if not rate_decision.get("allowed"):
+                    headers = rate_limiter.headers(rate_decision)
+                    headers["Retry-After"] = str(rate_decision.get("retry_after", 1))
+                    return JSONResponse(
+                        {
+                            "ok": False,
+                            "error": rate_decision.get("reason", "rate_limited"),
+                            "retry_after_seconds": rate_decision.get("retry_after", 1),
+                            "limit_per_window": rate_decision.get("limit", 0),
+                            "scope": rate_decision.get("scope", "default"),
+                        },
+                        status_code=429,
+                        headers=headers,
+                    )
 
         response = await call_next(request)
+
+        if rate_decision:
+            for key, value in rate_limiter.headers(rate_decision).items():
+                response.headers.setdefault(key, value)
+        if admin_bypass:
+            response.headers.setdefault("X-RateLimit-Bypass", "admin")
 
         if SECURITY_HEADERS_ENABLED:
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -317,10 +519,23 @@ def security_status() -> Dict[str, Any]:
         "max_request_bytes": MAX_REQUEST_BYTES,
         "rate_limit_window_seconds": RATE_LIMIT_WINDOW_SECONDS,
         "rate_limit_default": RATE_LIMIT_DEFAULT,
+        "rate_limit_public": RATE_LIMIT_PUBLIC,
         "rate_limit_api": RATE_LIMIT_API,
+        "rate_limit_jobs": RATE_LIMIT_JOBS,
+        "rate_limit_ws": RATE_LIMIT_WS,
+        "rate_limit_search": RATE_LIMIT_SEARCH,
+        "rate_limit_admin": RATE_LIMIT_ADMIN,
         "rate_limit_heavy": RATE_LIMIT_HEAVY,
         "rate_limit_abuse": RATE_LIMIT_ABUSE,
+        "rate_limit_ban_threshold": RATE_LIMIT_BAN_THRESHOLD,
+        "rate_limit_ban_seconds": RATE_LIMIT_BAN_SECONDS,
+        "rate_limit_status": RATE_LIMIT_STATUS,
+        "rate_limit_admin_bypass": RATE_LIMIT_ADMIN_BYPASS,
         "job_workers": JOB_WORKERS,
         "job_retention": JOB_RETENTION,
         "job_result_max_chars": JOB_RESULT_MAX_CHARS,
     }
+
+
+def rate_limit_status() -> Dict[str, Any]:
+    return rate_limiter.status()
