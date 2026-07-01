@@ -1,0 +1,32 @@
+name: Build Extension Package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extension/**"
+      - "scripts/package_extension.py"
+      - ".github/workflows/build-extension.yml"
+  workflow_dispatch:
+
+jobs:
+  package-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build extension ZIP
+        run: python scripts/package_extension.py
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claimradar-bg-extension
+          path: dist/*.zip
+          if-no-files-found: error
