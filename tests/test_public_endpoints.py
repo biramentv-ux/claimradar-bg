@@ -4,16 +4,19 @@ os.environ.setdefault("DB_ENABLED", "0")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "0")
 os.environ.setdefault("MONITORING_ENABLED", "1")
 os.environ.setdefault("REQUEST_LOG_ENABLED", "0")
+os.environ.setdefault("AUTH_ENABLED", "1")
 os.environ.setdefault("ADMIN_KEY", "test-admin-key")
+os.environ.setdefault("MODERATOR_KEY", "test-moderator-key")
+os.environ.setdefault("VIEWER_KEY", "test-viewer-key")
 os.environ.setdefault("WHISPER_MODEL_SIZE", "tiny")
 os.environ.setdefault("WHISPER_DEVICE", "cpu")
 os.environ.setdefault("WHISPER_COMPUTE_TYPE", "int8")
 
 from fastapi.testclient import TestClient
 
-import persistent_launch
+import auth_launch
 
-client = TestClient(persistent_launch.app)
+client = TestClient(auth_launch.app)
 
 
 def test_database_status_endpoint():
@@ -29,6 +32,39 @@ def test_database_schema_endpoint():
     assert response.status_code == 200
     assert "claimradar_checks" in response.text
     assert "claimradar_jobs" in response.text
+
+
+def test_auth_status_and_whoami_endpoints():
+    status = client.get("/auth/status")
+    assert status.status_code == 200
+    assert status.json()["ok"] is True
+    assert "admin" in status.json()["auth"]["roles"]
+
+    anonymous = client.get("/api/auth/whoami")
+    assert anonymous.status_code == 200
+    assert anonymous.json()["auth"]["role"] == "anonymous"
+
+    viewer = client.get("/api/auth/whoami", headers={"x-api-key": "test-viewer-key"})
+    assert viewer.status_code == 200
+    assert viewer.json()["auth"]["role"] == "viewer"
+
+    admin = client.get("/api/auth/whoami", headers={"authorization": "Bearer test-admin-key"})
+    assert admin.status_code == 200
+    assert admin.json()["auth"]["role"] == "admin"
+
+
+def test_auth_roles_and_check_endpoint():
+    roles = client.get("/api/auth/roles")
+    assert roles.status_code == 200
+    assert roles.json()["roles"]["owner"] > roles.json()["roles"]["admin"]
+
+    denied = client.post("/api/auth/check", json={"token": "test-viewer-key", "minimum_role": "admin"})
+    assert denied.status_code == 200
+    assert denied.json()["allowed"] is False
+
+    allowed = client.post("/api/auth/check", json={"token": "test-admin-key", "minimum_role": "admin"})
+    assert allowed.status_code == 200
+    assert allowed.json()["allowed"] is True
 
 
 def test_monitoring_endpoints():
