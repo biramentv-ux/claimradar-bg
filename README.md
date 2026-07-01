@@ -11,13 +11,20 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, security/rate limiting, background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, security/rate limiting, background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
 ```text
 /
 /product
+/about
+/methodology
+/privacy
+/terms
+/sources
+/contact
+/legal-methodology.md
 /health
 /db/status
 /api/db/status
@@ -31,6 +38,19 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
+## Версия 2.8 — Legal и Methodology Pages
+
+Добавено:
+
+- `/about` — какво е ClaimRadar BG;
+- `/methodology` — workflow, claim extraction, evidence, verdict и confidence;
+- `/privacy` — какви данни може да обработва системата;
+- `/terms` — условия и ограничения;
+- `/sources` — whitelist и принципи за избор на източници;
+- `/contact` — обратна връзка и abuse/report насоки;
+- `/legal-methodology.md` — Markdown версия на съдържанието;
+- `LEGAL_METHODOLOGY_BG.md` — repo документ със същата информация.
+
 ## Версия 2.7 — Supabase/PostgreSQL Persistent Storage
 
 Добавено:
@@ -38,7 +58,7 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - `supabase/schema.sql` — SQL schema за Supabase/PostgreSQL;
 - `db_storage.py` — Postgres adapter с JSONL fallback;
 - `persistent_launch.py` — wrapper, който patch-ва JSONL записите към Postgres;
-- Dockerfile вече стартира `persistent_launch.py`;
+- Dockerfile стартира `persistent_launch.py`;
 - `psycopg[binary]` е добавен в `requirements.txt`;
 - `/db/status` и `/api/db/status`;
 - `/api/db/schema` за преглед на SQL схемата;
@@ -47,56 +67,12 @@ Hugging Face-ready Docker приложение за България с Gradio U
 
 ## Database variables
 
-Добави като Hugging Face Secret:
-
 ```bash
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/postgres?sslmode=require
-```
-
-Алтернативни имена, които също се разпознават:
-
-```bash
 SUPABASE_DB_URL=...
 POSTGRES_URL=...
-```
-
-Препоръчителни variables:
-
-```bash
 DB_ENABLED=1
 DB_SSLMODE=require
-```
-
-## Supabase setup
-
-1. Създай Supabase project.
-2. Отвори SQL Editor.
-3. Пусни съдържанието на:
-
-```text
-supabase/schema.sql
-```
-
-4. В Hugging Face Secrets добави `DATABASE_URL`.
-5. Restart Space.
-6. Провери:
-
-```text
-/db/status
-```
-
-7. Мигрирай старите JSONL записи към Postgres:
-
-```text
-POST /api/db/migrate-jsonl
-```
-
-Body:
-
-```json
-{
-  "admin_key": "YOUR_ADMIN_KEY"
-}
 ```
 
 ## Версия 2.6 — Security и Background Jobs
