@@ -10,12 +10,16 @@ import persistent_launch as persistent
 from auth_roles import is_admin_key, register_auth_routes
 from db_storage import storage
 from jobs_api import register_job_routes
+from monitoring import MonitoringMiddleware
 from rate_limit_api import register_rate_limit_routes
+from security_jobs import SecurityAndRateLimitMiddleware
 
 # Upgrade admin validation for new outer routes to support role-based API keys.
 persistent.can_admin = is_admin_key
 
 app = FastAPI(title="ClaimRadar BG Auth Layer", version="3.3-auth-admin-roles")
+app.add_middleware(SecurityAndRateLimitMiddleware)
+app.add_middleware(MonitoringMiddleware)
 
 
 def can_admin(admin_key: str = "") -> bool:
