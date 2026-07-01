@@ -11,13 +11,14 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, monitoring/logging, automated tests, security/rate limiting, background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, monitoring/logging, automated tests, security/rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
 ```text
 /
 /product
+/jobs
 /about
 /methodology
 /privacy
@@ -38,8 +39,58 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /sources/whitelist
 /social-preview.svg
 /api/jobs
+/api/jobs/stats
+/api/jobs/<job_id>
+/api/jobs/<job_id>/cancel
+/api/jobs/<job_id>/retry
+/api/jobs/cleanup
 /check/<share_id>
 /api/check/<share_id>
+```
+
+## Версия 3.1 — Enhanced Background Jobs
+
+Добавено:
+
+- `jobs_api.py` — reusable FastAPI job routes;
+- `/jobs` — public jobs dashboard;
+- `/api/jobs?status=&type=&limit=` — filtered job list;
+- `/api/jobs/stats` — status/type counters, duration metrics и worker info;
+- `/api/jobs/<job_id>` — детайлен job status;
+- `POST /api/jobs/check`;
+- `POST /api/jobs/ai-verdict`;
+- `POST /api/jobs/real-check`;
+- `POST /api/jobs/<job_id>/cancel` — admin-protected cancel request;
+- `POST /api/jobs/<job_id>/retry` — admin-protected retry;
+- `POST /api/jobs/cleanup` — admin-protected cleanup на стари terminal jobs;
+- job lifecycle events;
+- `queued`, `running`, `done`, `failed`, `cancelled` statuses;
+- `started_at`, `finished_at`, `duration_seconds`, `attempt`, `parent_id`;
+- result trimming чрез `JOB_RESULT_MAX_CHARS`;
+- tests за job dashboard, stats, create/get/cancel/retry/cleanup.
+
+### Job examples
+
+```bash
+curl -X POST https://dyrakarmy-claimradar-bg.hf.space/api/jobs/check \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Инфлацията в България е 10 процента през 2024 година."}'
+```
+
+```bash
+curl https://dyrakarmy-claimradar-bg.hf.space/api/jobs/<job_id>
+```
+
+```bash
+curl -X POST https://dyrakarmy-claimradar-bg.hf.space/api/jobs/<job_id>/cancel \
+  -H "Content-Type: application/json" \
+  -d '{"admin_key":"YOUR_ADMIN_KEY","reason":"manual cancel"}'
+```
+
+```bash
+curl -X POST https://dyrakarmy-claimradar-bg.hf.space/api/jobs/<job_id>/retry \
+  -H "Content-Type: application/json" \
+  -d '{"admin_key":"YOUR_ADMIN_KEY"}'
 ```
 
 ## Версия 3.0 — Automated Tests
@@ -54,54 +105,13 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - `tests/test_public_endpoints.py`;
 - `.github/workflows/tests.yml`.
 
-Тестовете покриват:
-
-- основни project files;
-- Supabase schema contract;
-- README endpoint documentation;
-- Extension Manifest V3 contract;
-- extension packaging script;
-- generated PNG icons;
-- Postgres storage adapter fallback;
-- monitoring metrics/event logger;
-- FastAPI smoke endpoints:
-  - `/db/status`;
-  - `/api/db/schema`;
-  - `/monitoring/status`;
-  - `/monitoring/metrics`;
-  - `/monitoring/logs`;
-  - `/api/monitoring/event`;
-  - `/about`;
-  - `/methodology`;
-  - `/privacy`;
-  - `/terms`;
-  - `/sources`;
-  - `/contact`;
-  - `/legal-methodology.md`.
-
-### Run tests locally
+Локално:
 
 ```bash
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 pytest
 ```
-
-### Run extension packaging test
-
-```bash
-python scripts/package_extension.py
-```
-
-### GitHub Actions
-
-Workflow:
-
-```text
-.github/workflows/tests.yml
-```
-
-Той се стартира при push към `main`, pull request към `main` и ръчно чрез `workflow_dispatch`.
 
 ## Версия 2.9 — Monitoring и Logging
 
@@ -110,13 +120,7 @@ Workflow:
 - `monitoring.py`;
 - request logging middleware;
 - `X-Request-ID` response header;
-- `X-ClaimRadar-Monitoring` response header;
-- latency metrics;
-- status code counters;
-- method counters;
-- top path counters;
-- recent request buffer;
-- recent error buffer;
+- latency/status metrics;
 - JSONL event log в `data/system_events.jsonl`;
 - `/monitoring/status`;
 - `/monitoring/metrics`;
@@ -160,17 +164,29 @@ DB_ENABLED=1
 DB_SSLMODE=require
 ```
 
-## Версия 2.6 — Security и Background Jobs
+## Security / Jobs / Monitoring Variables
 
-Добавено:
-
-- `security_jobs.py`;
-- rate limiting middleware;
-- security headers;
-- request size guard;
-- background job store;
-- `/security/status`;
-- `/api/jobs/*`.
+```bash
+RATE_LIMIT_ENABLED=1
+SECURITY_HEADERS_ENABLED=1
+MAX_REQUEST_BYTES=26214400
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_DEFAULT=120
+RATE_LIMIT_API=60
+RATE_LIMIT_HEAVY=12
+RATE_LIMIT_ABUSE=6
+JOB_WORKERS=2
+JOB_MAX_TEXT_CHARS=12000
+JOB_RETENTION=500
+JOB_RESULT_MAX_CHARS=50000
+MONITORING_ENABLED=1
+REQUEST_LOG_ENABLED=1
+REQUEST_LOG_BODY=0
+MONITORING_RECENT_LIMIT=200
+MONITORING_SLOW_MS=2500
+MONITORING_LOG_FILE=data/system_events.jsonl
+ADMIN_KEY=your-secret-admin-key
+```
 
 ## Search API настройки
 
@@ -192,7 +208,7 @@ OPENAI_API_KEY=your-key-here
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-## Hugging Face Variables
+## Hugging Face базови Variables
 
 ```bash
 WHISPER_MODEL_SIZE=base
@@ -204,28 +220,6 @@ ROLLING_WINDOW_MB=12
 STREAM_MAX_BUFFER_MB=60
 STREAM_LANGUAGE=bg
 PUBLIC_BASE_URL=https://dyrakarmy-claimradar-bg.hf.space
-SEARCH_PROVIDER=auto
-SEARCH_STRICT_WHITELIST=1
-RATE_LIMIT_ENABLED=1
-SECURITY_HEADERS_ENABLED=1
-MAX_REQUEST_BYTES=26214400
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_DEFAULT=120
-RATE_LIMIT_API=60
-RATE_LIMIT_HEAVY=12
-RATE_LIMIT_ABUSE=6
-JOB_WORKERS=2
-JOB_MAX_TEXT_CHARS=12000
-JOB_RETENTION=500
-MONITORING_ENABLED=1
-REQUEST_LOG_ENABLED=1
-REQUEST_LOG_BODY=0
-MONITORING_RECENT_LIMIT=200
-MONITORING_SLOW_MS=2500
-MONITORING_LOG_FILE=data/system_events.jsonl
-ADMIN_KEY=your-secret-admin-key
-DB_ENABLED=1
-DB_SSLMODE=require
 ```
 
 ## Рапорт
