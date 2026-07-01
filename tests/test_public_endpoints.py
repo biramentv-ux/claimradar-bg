@@ -42,6 +42,26 @@ def test_monitoring_endpoints():
     assert "metrics" in metrics.json()
 
 
+def test_rate_limit_status_and_reset_endpoints():
+    status = client.get("/rate-limit/status")
+    assert status.status_code == 200
+    data = status.json()
+    assert data["ok"] is True
+    assert "rate_limit" in data
+    assert "limits" in data["rate_limit"]
+
+    api_status = client.get("/api/rate-limit/status")
+    assert api_status.status_code == 200
+    assert api_status.json()["ok"] is True
+
+    denied = client.post("/api/rate-limit/reset", json={"all": True})
+    assert denied.status_code == 403
+
+    allowed = client.post("/api/rate-limit/reset", json={"admin_key": "test-admin-key", "all": True})
+    assert allowed.status_code == 200
+    assert allowed.json()["ok"] is True
+
+
 def test_admin_monitoring_logs_endpoint_requires_key():
     denied = client.get("/monitoring/logs")
     assert denied.status_code == 403
