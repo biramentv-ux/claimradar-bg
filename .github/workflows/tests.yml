@@ -53,7 +53,7 @@ jobs:
 
       - name: Compile Python files
         run: |
-          python -m py_compile app.py launch.py persistent_launch.py db_storage.py security_jobs.py jobs_api.py monitoring.py search_providers.py scripts/package_extension.py
+          python -m py_compile app.py launch.py persistent_launch.py db_storage.py security_jobs.py jobs_api.py persistent_jobs.py monitoring.py search_providers.py scripts/package_extension.py
 
       - name: Run pytest
         run: pytest
