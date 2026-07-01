@@ -10,16 +10,21 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 import app as app_module
 from search_providers import SOURCE_WHITELIST, active_search_config, enhanced_search_web
+from security_jobs import JobStore, SecurityAndRateLimitMiddleware, security_status
 
 # Patch the lightweight DuckDuckGo search in app.py with the provider layer:
 # Brave / Bing / Tavily / SerpAPI / Google CSE / DuckDuckGo fallback.
 app_module.search_web = enhanced_search_web
 
-public_app = FastAPI(title="ClaimRadar BG Public Layer", version="2.5-privacy-metadata-abuse")
+public_app = FastAPI(title="ClaimRadar BG Public Layer", version="2.6-security-jobs")
+public_app.add_middleware(SecurityAndRateLimitMiddleware)
 
 DATA_DIR: Path = app_module.DATA_DIR
 VISIBILITY_FILE = DATA_DIR / "visibility.jsonl"
 ABUSE_FILE = DATA_DIR / "abuse_reports.jsonl"
+job_store = JobStore(DATA_DIR)
+
+JOB_MAX_TEXT_CHARS = int(os.getenv("JOB_MAX_TEXT_CHARS", "12000"))
 
 
 def public_base() -> str:
@@ -67,43 +72,14 @@ def social_image_url(title: str = "ClaimRadar BG") -> str:
 def product_page_html() -> str:
     canonical = f"{public_base()}/product"
     image = social_image_url("ClaimRadar BG · Информация за продукта")
+    sec = security_status()
     return f"""<!doctype html>
-<html lang="bg">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ClaimRadar BG · Информация за продукта</title>
-  <meta name="description" content="ClaimRadar BG е български инструмент за откриване, транскрибиране и проверка на публични твърдения с evidence, AI verdict и цитати." />
-  <link rel="canonical" href="{escape(canonical)}" />
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="ClaimRadar BG · Информация за продукта" />
-  <meta property="og:description" content="Български AI помощник за проверка на публични твърдения с evidence, verdict и цитати." />
-  <meta property="og:url" content="{escape(canonical)}" />
-  <meta property="og:image" content="{escape(image)}" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="ClaimRadar BG · Информация за продукта" />
-  <meta name="twitter:description" content="Български AI помощник за проверка на публични твърдения." />
-  <meta name="twitter:image" content="{escape(image)}" />
-  <style>{base_style()}</style>
-</head>
-<body>
-<main>
-  <section class="hero">
-    <div class="kicker">ClaimRadar BG · продуктова информация</div>
-    <h1>Български AI помощник за проверка на публични твърдения</h1>
-    <p class="lead">ClaimRadar BG помага да се откриват проверими твърдения в текст, аудио, видео, YouTube/live съдържание и публични изказвания. Системата извлича claims, търси надеждни източници, показва evidence links, дава предпазлива оценка и позволява споделяне чрез публична страница.</p>
-    <div class="actions"><a class="button primary" href="/" target="_blank">Отвори приложението</a><a class="button" href="/search/status" target="_blank">Search status</a><a class="button" href="/sources/whitelist" target="_blank">Източници</a><a class="button" href="https://github.com/biramentv-ux/claimradar-bg" target="_blank">GitHub</a></div>
-  </section>
-  <section class="section grid"><div class="card"><h3>За кого е?</h3><p class="muted">За журналисти, студенти, анализатори, модератори, създатели на съдържание и хора, които искат бързо да проверят публични твърдения в български контекст.</p></div><div class="card"><h3>Какво проверява?</h3><p class="muted">Твърдения с числа, проценти, години, бюджет, инфлация, избори, закони, енергетика, образование, здравеопазване, ЕС и други публични теми.</p></div><div class="card"><h3>Какво не е?</h3><p class="muted">Не е съд, не е окончателна журналистическа присъда и не трябва да се използва като единствен източник. Резултатите са ориентир за проверка.</p></div></section>
-  <section class="section card"><h2>Как работи</h2><div class="flow"><div>1. Вход</div><div>2. Транскрипция</div><div>3. Claims</div><div>4. Evidence</div><div>5. Verdict</div><div>6. Share</div></div><p class="muted">Потребителят подава текст или медия. При аудио/видео системата прави транскрипция с Faster Whisper. След това открива проверими claims, избира тема, търси evidence в whitelist/API източници и показва резултат с confidence, цитати и публичен Share ID.</p></section>
-  <section class="section grid"><div class="card"><h3>Текстова проверка</h3><p class="muted">Поставяш текст от дебат, интервю, новина или стенограма. Системата извлича проверими твърдения и предлага източници.</p></div><div class="card"><h3>AI verdict</h3><p class="muted">Сравнява твърдението с намереното evidence и връща verdict: вярно, частично вярно, подвеждащо, невярно, непроверимо или нужен контекст.</p></div><div class="card"><h3>Аудио/видео</h3><p class="muted">Качваш кратък файл, получаваш транскрипция, проверка, AI verdict и SRT export.</p></div><div class="card"><h3>Realtime/Extension</h3><p class="muted">Chrome/Edge extension overlay може да анализира YouTube captions, селекция от страница или tab audio realtime stream.</p></div></section>
-  <section class="section card"><h2>Verdict значения</h2><ul class="list"><li><b>Вярно</b> — наличното evidence подкрепя твърдението.</li><li><b>По-скоро вярно</b> — твърдението е основно подкрепено, но може да има малки уточнения.</li><li><b>Частично вярно</b> — има вярна част, но контекстът или формулировката са непълни.</li><li><b>Подвеждащо</b> — има данни, но твърдението може да внушава грешен извод.</li><li><b>Невярно</b> — наличното evidence противоречи на твърдението.</li><li><b>Непроверимо</b> — липсват достатъчно надеждни данни.</li><li><b>Нужен контекст</b> — има evidence, но е нужна допълнителна проверка или уточнение.</li></ul></section>
-  <section class="section card"><h2>Източници и търсене</h2><p class="muted">ClaimRadar BG използва whitelist от официални и надеждни източници. Search API слойът поддържа Brave, Bing, Tavily, SerpAPI, Google CSE и DuckDuckGo fallback.</p><div>{''.join([f'<span class="pill">{escape(domain)}</span>' for domain in SOURCE_WHITELIST])}</div></section>
-  <section class="section warning"><b>Важно:</b> ClaimRadar BG е тестов инструмент. Той помага за ориентация, но не заменя човешка проверка, редакторска преценка или официално становище.</section>
-  <p class="footer">Версия на app слоя: {escape(getattr(app_module, 'APP_VERSION', 'unknown'))}. Public layer: 2.5-privacy-metadata-abuse.</p>
-</main>
-</body>
-</html>"""
+<html lang="bg"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>ClaimRadar BG · Информация за продукта</title><meta name="description" content="ClaimRadar BG е български инструмент за откриване, транскрибиране и проверка на публични твърдения с evidence, AI verdict и цитати." /><link rel="canonical" href="{escape(canonical)}" /><meta property="og:type" content="website" /><meta property="og:title" content="ClaimRadar BG · Информация за продукта" /><meta property="og:description" content="Български AI помощник за проверка на публични твърдения с evidence, verdict и цитати." /><meta property="og:url" content="{escape(canonical)}" /><meta property="og:image" content="{escape(image)}" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="ClaimRadar BG · Информация за продукта" /><meta name="twitter:description" content="Български AI помощник за проверка на публични твърдения." /><meta name="twitter:image" content="{escape(image)}" /><style>{base_style()}</style></head>
+<body><main><section class="hero"><div class="kicker">ClaimRadar BG · продуктова информация</div><h1>Български AI помощник за проверка на публични твърдения</h1><p class="lead">ClaimRadar BG помага да се откриват проверими твърдения в текст, аудио, видео, YouTube/live съдържание и публични изказвания. Системата извлича claims, търси надеждни източници, показва evidence links, дава предпазлива оценка и позволява споделяне чрез публична страница.</p><div class="actions"><a class="button primary" href="/" target="_blank">Отвори приложението</a><a class="button" href="/search/status" target="_blank">Search status</a><a class="button" href="/security/status" target="_blank">Security status</a><a class="button" href="/api/jobs" target="_blank">Jobs</a><a class="button" href="/sources/whitelist" target="_blank">Източници</a><a class="button" href="https://github.com/biramentv-ux/claimradar-bg" target="_blank">GitHub</a></div></section>
+<section class="section grid"><div class="card"><h3>За кого е?</h3><p class="muted">За журналисти, студенти, анализатори, модератори, създатели на съдържание и хора, които искат бързо да проверят публични твърдения в български контекст.</p></div><div class="card"><h3>Какво проверява?</h3><p class="muted">Твърдения с числа, проценти, години, бюджет, инфлация, избори, закони, енергетика, образование, здравеопазване, ЕС и други публични теми.</p></div><div class="card"><h3>Защита</h3><p class="muted">Rate limiting: {'активен' if sec.get('rate_limit_enabled') else 'изключен'}. Security headers: {'активни' if sec.get('security_headers_enabled') else 'изключени'}. Background workers: {sec.get('job_workers')}.</p></div></section>
+<section class="section card"><h2>Как работи</h2><div class="flow"><div>1. Вход</div><div>2. Транскрипция</div><div>3. Claims</div><div>4. Evidence</div><div>5. Verdict</div><div>6. Share</div></div><p class="muted">Потребителят подава текст или медия. При аудио/видео системата прави транскрипция с Faster Whisper. След това открива проверими claims, избира тема, търси evidence в whitelist/API източници и показва резултат с confidence, цитати и публичен Share ID.</p></section>
+<section class="section grid"><div class="card"><h3>Текстова проверка</h3><p class="muted">Поставяш текст от дебат, интервю, новина или стенограма. Системата извлича проверими твърдения и предлага източници.</p></div><div class="card"><h3>AI verdict</h3><p class="muted">Сравнява твърдението с намереното evidence и връща verdict: вярно, частично вярно, подвеждащо, невярно, непроверимо или нужен контекст.</p></div><div class="card"><h3>Background jobs</h3><p class="muted">Тежки задачи могат да се пускат през `/api/jobs/*` и да се следят по job ID, без да блокират основния процес.</p></div><div class="card"><h3>Realtime/Extension</h3><p class="muted">Chrome/Edge extension overlay може да анализира YouTube captions, селекция от страница или tab audio realtime stream.</p></div></section>
+<section class="section card"><h2>Източници и търсене</h2><p class="muted">ClaimRadar BG използва whitelist от официални и надеждни източници. Search API слойът поддържа Brave, Bing, Tavily, SerpAPI, Google CSE и DuckDuckGo fallback.</p><div>{''.join([f'<span class="pill">{escape(domain)}</span>' for domain in SOURCE_WHITELIST])}</div></section><section class="section warning"><b>Важно:</b> ClaimRadar BG е тестов инструмент. Той помага за ориентация, но не заменя човешка проверка, редакторска преценка или официално становище.</section><p class="footer">Версия на app слоя: {escape(getattr(app_module, 'APP_VERSION', 'unknown'))}. Public layer: 2.6-security-jobs.</p></main></body></html>"""
 
 
 def public_page_html(rec: dict, admin_view: bool = False) -> str:
@@ -120,82 +96,84 @@ def public_page_html(rec: dict, admin_view: bool = False) -> str:
     safe_copy_json = json.dumps(copy_text, ensure_ascii=False)
     safe_share_json = json.dumps(canonical, ensure_ascii=False)
     noindex = '<meta name="robots" content="noindex,nofollow" />' if visibility != "public" else ""
-    return f"""<!doctype html>
-<html lang="bg">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{escape(title)} · ClaimRadar BG</title>
-  <meta name="description" content="ClaimRadar BG public result page with verdict, evidence links and confidence." />
-  {noindex}
-  <link rel="canonical" href="{escape(canonical)}" />
-  <meta property="og:type" content="article" />
-  <meta property="og:title" content="{escape(title)} · ClaimRadar BG" />
-  <meta property="og:description" content="{escape(text_preview[:180] or 'Публична проверка с evidence и AI verdict.')}" />
-  <meta property="og:url" content="{escape(canonical)}" />
-  <meta property="og:image" content="{escape(image)}" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="{escape(title)} · ClaimRadar BG" />
-  <meta name="twitter:description" content="{escape(text_preview[:180] or 'Публична проверка с evidence и AI verdict.')}" />
-  <meta name="twitter:image" content="{escape(image)}" />
-  <style>{base_style()}</style>
-</head>
-<body>
-  <main>
-    <section class="hero">
-      <div class="kicker">ClaimRadar BG · public result page</div>
-      <h1>{escape(title)}</h1>
-      <div><span class="pill">ID: {escape(check_id)}</span><span class="pill">Mode: {escape(mode)}</span><span class="pill {'private' if visibility != 'public' else ''}">Visibility: {escape(visibility)}</span><span class="pill">Date: {escape(created_at)}</span></div>
-      <p class="preview">{escape(text_preview)}</p>
-      <div class="actions"><button class="primary" onclick="copyResult()">Копирай резултата</button><button onclick="shareResult()">Сподели</button><button class="danger" onclick="reportAbuse()">Report abuse</button><button onclick="toggleVisibility()">Public/private</button><a class="button" href="{escape(public_base())}" target="_blank">Отвори приложението</a><a class="button" href="/product" target="_blank">За продукта</a><a class="button" href="/api/check/{escape(check_id)}" target="_blank">JSON</a></div>
-    </section>
-    <section class="content">{body_html}</section>
-    <p class="disclaimer">{escape(app_module.DISCLAIMER)} Всички резултати трябва да се проверяват по посочените източници.</p>
-  </main>
-  <script>
-    const CHECK_ID = {json.dumps(check_id)};
-    const COPY_TEXT = {safe_copy_json};
-    const SHARE_URL = {safe_share_json};
-    async function copyResult() {{ try {{ await navigator.clipboard.writeText(COPY_TEXT || SHARE_URL); alert('Копирано.'); }} catch(e) {{ prompt('Копирай:', COPY_TEXT || SHARE_URL); }} }}
-    async function shareResult() {{ if (navigator.share) {{ await navigator.share({{title: document.title, url: SHARE_URL}}); }} else {{ try {{ await navigator.clipboard.writeText(SHARE_URL); alert('Линкът е копиран.'); }} catch(e) {{ prompt('Share URL:', SHARE_URL); }} }} }}
-    async function reportAbuse() {{
-      const reason = prompt('Причина за доклада: spam, грешна информация, лични данни, вредно съдържание или друго.');
-      if (!reason) return;
-      const details = prompt('Допълнителни детайли по избор:') || '';
-      const res = await fetch('/api/report-abuse', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{check_id: CHECK_ID, reason, details, page: location.href}})}});
-      alert(res.ok ? 'Докладът е записан. Благодаря.' : 'Неуспешно изпращане на доклада.');
-    }}
-    async function toggleVisibility() {{
-      const admin_key = prompt('Admin key:');
-      if (!admin_key) return;
-      const visibility = prompt('Нова видимост: public или private', '{visibility}') || '{visibility}';
-      const res = await fetch('/api/check/' + encodeURIComponent(CHECK_ID) + '/visibility', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{admin_key, visibility}})}});
-      const data = await res.json().catch(() => ({{ok:false}}));
-      alert(data.ok ? ('Записано: ' + data.visibility) : ('Грешка: ' + (data.error || 'unknown')));
-      if (data.ok) location.reload();
-    }}
-  </script>
-</body>
-</html>"""
+    return f"""<!doctype html><html lang="bg"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>{escape(title)} · ClaimRadar BG</title><meta name="description" content="ClaimRadar BG public result page with verdict, evidence links and confidence." />{noindex}<link rel="canonical" href="{escape(canonical)}" /><meta property="og:type" content="article" /><meta property="og:title" content="{escape(title)} · ClaimRadar BG" /><meta property="og:description" content="{escape(text_preview[:180] or 'Публична проверка с evidence и AI verdict.')}" /><meta property="og:url" content="{escape(canonical)}" /><meta property="og:image" content="{escape(image)}" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="{escape(title)} · ClaimRadar BG" /><meta name="twitter:description" content="{escape(text_preview[:180] or 'Публична проверка с evidence и AI verdict.')}" /><meta name="twitter:image" content="{escape(image)}" /><style>{base_style()}</style></head>
+<body><main><section class="hero"><div class="kicker">ClaimRadar BG · public result page</div><h1>{escape(title)}</h1><div><span class="pill">ID: {escape(check_id)}</span><span class="pill">Mode: {escape(mode)}</span><span class="pill {'private' if visibility != 'public' else ''}">Visibility: {escape(visibility)}</span><span class="pill">Date: {escape(created_at)}</span></div><p class="preview">{escape(text_preview)}</p><div class="actions"><button class="primary" onclick="copyResult()">Копирай резултата</button><button onclick="shareResult()">Сподели</button><button class="danger" onclick="reportAbuse()">Report abuse</button><button onclick="toggleVisibility()">Public/private</button><a class="button" href="{escape(public_base())}" target="_blank">Отвори приложението</a><a class="button" href="/product" target="_blank">За продукта</a><a class="button" href="/api/check/{escape(check_id)}" target="_blank">JSON</a></div></section><section class="content">{body_html}</section><p class="disclaimer">{escape(app_module.DISCLAIMER)} Всички резултати трябва да се проверяват по посочените източници.</p></main>
+<script>const CHECK_ID={json.dumps(check_id)};const COPY_TEXT={safe_copy_json};const SHARE_URL={safe_share_json};async function copyResult(){{try{{await navigator.clipboard.writeText(COPY_TEXT||SHARE_URL);alert('Копирано.')}}catch(e){{prompt('Копирай:',COPY_TEXT||SHARE_URL)}}}}async function shareResult(){{if(navigator.share){{await navigator.share({{title:document.title,url:SHARE_URL}})}}else{{try{{await navigator.clipboard.writeText(SHARE_URL);alert('Линкът е копиран.')}}catch(e){{prompt('Share URL:',SHARE_URL)}}}}}}async function reportAbuse(){{const reason=prompt('Причина за доклада: spam, грешна информация, лични данни, вредно съдържание или друго.');if(!reason)return;const details=prompt('Допълнителни детайли по избор:')||'';const res=await fetch('/api/report-abuse',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{check_id:CHECK_ID,reason,details,page:location.href}})}});alert(res.ok?'Докладът е записан. Благодаря.':'Неуспешно изпращане на доклада.')}}async function toggleVisibility(){{const admin_key=prompt('Admin key:');if(!admin_key)return;const visibility=prompt('Нова видимост: public или private','{visibility}')||'{visibility}';const res=await fetch('/api/check/'+encodeURIComponent(CHECK_ID)+'/visibility',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{admin_key,visibility}})}});const data=await res.json().catch(()=>({{ok:false}}));alert(data.ok?('Записано: '+data.visibility):('Грешка: '+(data.error||'unknown')));if(data.ok)location.reload();}}</script></body></html>"""
+
+
+def run_check_job(payload: dict) -> dict:
+    text = str(payload.get("text", ""))[:JOB_MAX_TEXT_CHARS]
+    rows = app_module.analyze_claims(text, max_claims=int(payload.get("max_claims", 30)))
+    return {"type": "check", "count": len(rows), "claims": rows}
+
+
+def run_ai_verdict_job(payload: dict) -> dict:
+    text = str(payload.get("text", ""))[:JOB_MAX_TEXT_CHARS]
+    html, copy_text, status = app_module.render_ai_verdict(text)
+    return {"type": "ai_verdict", "status": status, "html": html[:20000], "copy_text": copy_text[:20000]}
+
+
+def run_real_check_job(payload: dict) -> dict:
+    text = str(payload.get("text", ""))[:JOB_MAX_TEXT_CHARS]
+    html, copy_text, status = app_module.real_check(text)
+    return {"type": "real_check", "status": status, "html": html[:20000], "copy_text": copy_text[:20000]}
 
 
 @public_app.get("/social-preview.svg")
 def social_preview(title: str = "ClaimRadar BG"):
     safe_title = escape((title or "ClaimRadar BG")[:120])
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#020617"/><stop offset="0.55" stop-color="#1e1b4b"/><stop offset="1" stop-color="#0e7490"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-<rect width="1200" height="630" fill="url(#g)"/><circle cx="160" cy="100" r="220" fill="#22d3ee" opacity="0.18"/><circle cx="980" cy="80" r="240" fill="#a855f7" opacity="0.20"/><path d="M0 520 C260 440 420 590 680 500 S1020 430 1200 520" fill="none" stroke="#22d3ee" stroke-width="3" opacity="0.35"/>
-<text x="72" y="115" font-family="Arial, sans-serif" font-size="28" fill="#67e8f9" letter-spacing="6" font-weight="700">CLAIMRADAR BG</text>
-<text x="72" y="235" font-family="Arial, sans-serif" font-size="66" fill="#ffffff" font-weight="900" filter="url(#glow)">Проверка на твърдения</text>
-<foreignObject x="72" y="275" width="920" height="170"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,sans-serif;font-size:38px;line-height:1.18;color:#e0f2fe;font-weight:800;">{safe_title}</div></foreignObject>
-<text x="72" y="560" font-family="Arial, sans-serif" font-size="30" fill="#cbd5e1">Evidence · AI verdict · Citations · Български контекст</text>
-</svg>"""
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#020617"/><stop offset="0.55" stop-color="#1e1b4b"/><stop offset="1" stop-color="#0e7490"/></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><rect width="1200" height="630" fill="url(#g)"/><circle cx="160" cy="100" r="220" fill="#22d3ee" opacity="0.18"/><circle cx="980" cy="80" r="240" fill="#a855f7" opacity="0.20"/><path d="M0 520 C260 440 420 590 680 500 S1020 430 1200 520" fill="none" stroke="#22d3ee" stroke-width="3" opacity="0.35"/><text x="72" y="115" font-family="Arial, sans-serif" font-size="28" fill="#67e8f9" letter-spacing="6" font-weight="700">CLAIMRADAR BG</text><text x="72" y="235" font-family="Arial, sans-serif" font-size="66" fill="#ffffff" font-weight="900" filter="url(#glow)">Проверка на твърдения</text><foreignObject x="72" y="275" width="920" height="170"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Arial,sans-serif;font-size:38px;line-height:1.18;color:#e0f2fe;font-weight:800;">{safe_title}</div></foreignObject><text x="72" y="560" font-family="Arial, sans-serif" font-size="30" fill="#cbd5e1">Evidence · AI verdict · Citations · Български контекст</text></svg>"""
     return Response(svg, media_type="image/svg+xml")
 
 
 @public_app.get("/product", response_class=HTMLResponse)
 def product_page():
     return HTMLResponse(product_page_html())
+
+
+@public_app.get("/security/status")
+def api_security_status():
+    return JSONResponse({"ok": True, **security_status()})
+
+
+@public_app.get("/api/jobs")
+def api_jobs(limit: int = 30):
+    return JSONResponse({"ok": True, "jobs": job_store.recent(limit=max(1, min(limit, 100)))})
+
+
+@public_app.get("/api/jobs/{job_id}")
+def api_job(job_id: str):
+    job = job_store.get(job_id)
+    if not job:
+        return JSONResponse({"ok": False, "error": "job_not_found", "id": job_id}, status_code=404)
+    return JSONResponse({"ok": True, "job": job})
+
+
+@public_app.post("/api/jobs/check")
+async def api_job_check(request: Request):
+    payload = await request.json()
+    if not str(payload.get("text", "")).strip():
+        return JSONResponse({"ok": False, "error": "missing_text"}, status_code=400)
+    job = job_store.create("check", payload, run_check_job)
+    return JSONResponse({"ok": True, "job_id": job["id"], "status_url": f"/api/jobs/{job['id']}"})
+
+
+@public_app.post("/api/jobs/ai-verdict")
+async def api_job_ai_verdict(request: Request):
+    payload = await request.json()
+    if not str(payload.get("text", "")).strip():
+        return JSONResponse({"ok": False, "error": "missing_text"}, status_code=400)
+    job = job_store.create("ai_verdict", payload, run_ai_verdict_job)
+    return JSONResponse({"ok": True, "job_id": job["id"], "status_url": f"/api/jobs/{job['id']}"})
+
+
+@public_app.post("/api/jobs/real-check")
+async def api_job_real_check(request: Request):
+    payload = await request.json()
+    if not str(payload.get("text", "")).strip():
+        return JSONResponse({"ok": False, "error": "missing_text"}, status_code=400)
+    job = job_store.create("real_check", payload, run_real_check_job)
+    return JSONResponse({"ok": True, "job_id": job["id"], "status_url": f"/api/jobs/{job['id']}"})
 
 
 @public_app.get("/search/status")
@@ -210,15 +188,7 @@ async def api_report_abuse(request: Request):
     except Exception:
         payload = {}
     check_id = str(payload.get("check_id", "")).strip()
-    report = {
-        "id": __import__("uuid").uuid4().hex[:10],
-        "created_at": app_module.now_iso(),
-        "type": "abuse_report",
-        "check_id": check_id,
-        "reason": str(payload.get("reason", ""))[:300],
-        "details": str(payload.get("details", ""))[:1500],
-        "page": str(payload.get("page", ""))[:500],
-    }
+    report = {"id": __import__("uuid").uuid4().hex[:10], "created_at": app_module.now_iso(), "type": "abuse_report", "check_id": check_id, "reason": str(payload.get("reason", ""))[:300], "details": str(payload.get("details", ""))[:1500], "page": str(payload.get("page", ""))[:500]}
     app_module.append_jsonl(ABUSE_FILE, report)
     app_module.append_jsonl(app_module.FEEDBACK_FILE, {**report, "kind": "abuse_report", "comment": f"{report['reason']} — {report['details']}"})
     return JSONResponse({"ok": True, "report_id": report["id"]})
