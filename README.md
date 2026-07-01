@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, security/rate limiting, background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, monitoring/logging, security/rate limiting, background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
@@ -27,6 +27,10 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /legal-methodology.md
 /health
 /db/status
+/monitoring/status
+/monitoring/metrics
+/monitoring/logs?admin_key=...
+/api/monitoring/event
 /api/db/status
 /api/db/schema
 /security/status
@@ -38,32 +42,63 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
+## Версия 2.9 — Monitoring и Logging
+
+Добавено:
+
+- `monitoring.py`;
+- request logging middleware;
+- `X-Request-ID` response header;
+- `X-ClaimRadar-Monitoring` response header;
+- latency metrics;
+- status code counters;
+- method counters;
+- top path counters;
+- recent request buffer;
+- recent error buffer;
+- JSONL event log в `data/system_events.jsonl`;
+- `/monitoring/status`;
+- `/monitoring/metrics`;
+- admin-protected `/monitoring/logs`;
+- admin-protected `POST /api/monitoring/event`.
+
+### Monitoring variables
+
+```bash
+MONITORING_ENABLED=1
+REQUEST_LOG_ENABLED=1
+REQUEST_LOG_BODY=0
+MONITORING_RECENT_LIMIT=200
+MONITORING_SLOW_MS=2500
+MONITORING_LOG_FILE=data/system_events.jsonl
+```
+
 ## Версия 2.8 — Legal и Methodology Pages
 
 Добавено:
 
-- `/about` — какво е ClaimRadar BG;
-- `/methodology` — workflow, claim extraction, evidence, verdict и confidence;
-- `/privacy` — какви данни може да обработва системата;
-- `/terms` — условия и ограничения;
-- `/sources` — whitelist и принципи за избор на източници;
-- `/contact` — обратна връзка и abuse/report насоки;
-- `/legal-methodology.md` — Markdown версия на съдържанието;
-- `LEGAL_METHODOLOGY_BG.md` — repo документ със същата информация.
+- `/about`;
+- `/methodology`;
+- `/privacy`;
+- `/terms`;
+- `/sources`;
+- `/contact`;
+- `/legal-methodology.md`;
+- `LEGAL_METHODOLOGY_BG.md`.
 
 ## Версия 2.7 — Supabase/PostgreSQL Persistent Storage
 
 Добавено:
 
-- `supabase/schema.sql` — SQL schema за Supabase/PostgreSQL;
-- `db_storage.py` — Postgres adapter с JSONL fallback;
-- `persistent_launch.py` — wrapper, който patch-ва JSONL записите към Postgres;
+- `supabase/schema.sql`;
+- `db_storage.py`;
+- `persistent_launch.py`;
 - Dockerfile стартира `persistent_launch.py`;
-- `psycopg[binary]` е добавен в `requirements.txt`;
+- `psycopg[binary]`;
 - `/db/status` и `/api/db/status`;
-- `/api/db/schema` за преглед на SQL схемата;
-- `POST /api/db/migrate-jsonl` за миграция на старите JSONL записи към Postgres;
-- JSONL остава като backup/fallback, ако базата не е конфигурирана.
+- `/api/db/schema`;
+- `POST /api/db/migrate-jsonl`;
+- JSONL остава backup/fallback, ако базата не е конфигурирана.
 
 ## Database variables
 
@@ -132,6 +167,12 @@ RATE_LIMIT_ABUSE=6
 JOB_WORKERS=2
 JOB_MAX_TEXT_CHARS=12000
 JOB_RETENTION=500
+MONITORING_ENABLED=1
+REQUEST_LOG_ENABLED=1
+REQUEST_LOG_BODY=0
+MONITORING_RECENT_LIMIT=200
+MONITORING_SLOW_MS=2500
+MONITORING_LOG_FILE=data/system_events.jsonl
 ADMIN_KEY=your-secret-admin-key
 DB_ENABLED=1
 DB_SSLMODE=require
