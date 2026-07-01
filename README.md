@@ -11,19 +11,56 @@ license: mit
 
 # ClaimRadar BG
 
-Финална Hugging Face-ready версия за България: Docker Space с Gradio интерфейс, публичен архив, browser extension, word-by-word realtime WebSocket backend, AI verdict engine, Search API слой, публични result pages, privacy controls, social metadata и продуктова информационна страница.
+Финална Hugging Face-ready версия за България: Docker Space с Gradio интерфейс, публичен архив, browser extension, realtime WebSocket backend, AI verdict engine, Search API слой, публични result pages, privacy controls, security/rate limiting, background jobs, social metadata и продуктова информационна страница.
 
 ## Основни публични страници
 
 ```text
-https://dyrakarmy-claimradar-bg.hf.space
-https://dyrakarmy-claimradar-bg.hf.space/product
-https://dyrakarmy-claimradar-bg.hf.space/health
-https://dyrakarmy-claimradar-bg.hf.space/search/status
-https://dyrakarmy-claimradar-bg.hf.space/sources/whitelist
-https://dyrakarmy-claimradar-bg.hf.space/social-preview.svg
-https://dyrakarmy-claimradar-bg.hf.space/check/<share_id>
-https://dyrakarmy-claimradar-bg.hf.space/api/check/<share_id>
+/
+/product
+/health
+/security/status
+/search/status
+/sources/whitelist
+/social-preview.svg
+/api/jobs
+/check/<share_id>
+/api/check/<share_id>
+```
+
+## Версия 2.6 — Rate Limiting, Security, Background Jobs
+
+Добавено:
+
+- нов файл `security_jobs.py`;
+- FastAPI middleware за rate limiting;
+- security headers;
+- request size guard;
+- отделни лимити за public/API/heavy/abuse routes;
+- background job store;
+- ThreadPoolExecutor workers;
+- JSONL job persistence в `data/jobs.jsonl`;
+- endpoint `/security/status`;
+- endpoint `GET /api/jobs`;
+- endpoint `GET /api/jobs/<job_id>`;
+- endpoint `POST /api/jobs/check`;
+- endpoint `POST /api/jobs/ai-verdict`;
+- endpoint `POST /api/jobs/real-check`.
+
+### Security variables
+
+```bash
+RATE_LIMIT_ENABLED=1
+SECURITY_HEADERS_ENABLED=1
+MAX_REQUEST_BYTES=26214400
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_DEFAULT=120
+RATE_LIMIT_API=60
+RATE_LIMIT_HEAVY=12
+RATE_LIMIT_ABUSE=6
+JOB_WORKERS=2
+JOB_MAX_TEXT_CHARS=12000
+JOB_RETENTION=500
 ```
 
 ## Версия 2.5 — Privacy, Metadata, Social Preview, Abuse Reports
@@ -32,7 +69,7 @@ https://dyrakarmy-claimradar-bg.hf.space/api/check/<share_id>
 
 - public/private visibility слой за запазени проверки;
 - admin toggle за `public` / `private` от публичната result page;
-- private checks вече връщат 403 публично;
+- private checks връщат 403 публично;
 - canonical metadata за `/product` и `/check/<share_id>`;
 - Open Graph metadata;
 - Twitter card metadata;
@@ -114,13 +151,9 @@ bnr.bg
 
 ## Версия 2.2 — AI Verdict Engine
 
-Добавено:
-
 - tab **🧠 AI verdict**;
 - pipeline: `claim → evidence search → AI сравнение → verdict → цитати`;
-- evidence search по надеждни/официални домейни;
 - verdict-и: `Вярно`, `По-скоро вярно`, `Частично вярно`, `Подвеждащо`, `Невярно`, `Непроверимо`, `Нужен контекст`;
-- цитирани evidence линкове;
 - confidence score;
 - fallback режим, ако няма `OPENAI_API_KEY`.
 
@@ -152,27 +185,22 @@ python launch.py
 
 - публичен Gradio интерфейс;
 - `/product` продуктова страница;
+- `/security/status` security статус;
+- `/api/jobs/*` background jobs;
 - `/social-preview.svg` social preview image;
 - `/health` endpoint;
 - `/search/status` endpoint;
 - `/sources/whitelist` endpoint;
 - `/check/<share_id>` public/private result page;
 - `/api/check/<share_id>` JSON result;
-- `/api/report-abuse` abuse report endpoint;
+- `/api/report-abuse` report endpoint;
 - `/ws/realtime` WebSocket endpoint;
 - AI verdict + цитати;
 - Search API слой;
-- word-by-word realtime transcript за extension-а;
 - audio/video transcription;
 - `.srt` export;
 - публичен архив със Share ID;
 - feedback и animated admin панел.
-
-## Realtime endpoint
-
-```text
-wss://dyrakarmy-claimradar-bg.hf.space/ws/realtime
-```
 
 ## Hugging Face Variables
 
@@ -188,6 +216,17 @@ STREAM_LANGUAGE=bg
 PUBLIC_BASE_URL=https://dyrakarmy-claimradar-bg.hf.space
 SEARCH_PROVIDER=auto
 SEARCH_STRICT_WHITELIST=1
+RATE_LIMIT_ENABLED=1
+SECURITY_HEADERS_ENABLED=1
+MAX_REQUEST_BYTES=26214400
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_DEFAULT=120
+RATE_LIMIT_API=60
+RATE_LIMIT_HEAVY=12
+RATE_LIMIT_ABUSE=6
+JOB_WORKERS=2
+JOB_MAX_TEXT_CHARS=12000
+JOB_RETENTION=500
 ADMIN_KEY=your-secret-admin-key
 ```
 
