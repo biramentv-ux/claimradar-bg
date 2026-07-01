@@ -12,7 +12,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAM_MAX_BUFFER_MB=60 \
     MAX_MEDIA_MB=80 \
     DB_ENABLED=1 \
-    DB_SSLMODE=require
+    DB_SSLMODE=require \
+    AUTH_ENABLED=1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg curl \
@@ -28,4 +29,4 @@ COPY . /app
 
 EXPOSE 7860
 
-CMD ["python", "persistent_launch.py"]
+CMD ["python", "auth_launch.py"]
