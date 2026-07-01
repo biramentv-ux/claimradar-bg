@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, monitoring/logging, automated tests, security/rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, legal/methodology pages, monitoring/logging, automated tests, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
@@ -28,6 +28,9 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /legal-methodology.md
 /health
 /db/status
+/rate-limit/status
+/api/rate-limit/status
+/api/rate-limit/reset
 /monitoring/status
 /monitoring/metrics
 /monitoring/logs?admin_key=...
@@ -48,50 +51,75 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
+## Версия 3.2 — Advanced Rate Limiting
+
+Добавено:
+
+- per-scope rate limits;
+- hashed client identity вместо директно пазене на IP в buckets;
+- `X-RateLimit-Limit` response header;
+- `X-RateLimit-Remaining` response header;
+- `X-RateLimit-Reset` response header;
+- `X-RateLimit-Scope` response header;
+- `Retry-After` при 429;
+- temporary ban след твърде много нарушения;
+- admin bypass чрез query или admin header;
+- `/rate-limit/status`;
+- `/api/rate-limit/status`;
+- admin-protected `POST /api/rate-limit/reset`;
+- tests за rate limit status/reset endpoints.
+
+### Rate limit scopes
+
+```text
+public
+api
+jobs
+websocket
+search
+admin
+abuse
+status
+default
+```
+
+### Rate limit variables
+
+```bash
+RATE_LIMIT_ENABLED=1
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_DEFAULT=120
+RATE_LIMIT_PUBLIC=180
+RATE_LIMIT_API=60
+RATE_LIMIT_JOBS=20
+RATE_LIMIT_WS=20
+RATE_LIMIT_SEARCH=45
+RATE_LIMIT_ADMIN=30
+RATE_LIMIT_ABUSE=6
+RATE_LIMIT_STATUS=60
+RATE_LIMIT_BAN_THRESHOLD=8
+RATE_LIMIT_BAN_SECONDS=300
+RATE_LIMIT_ADMIN_BYPASS=1
+RATE_LIMIT_HASH_SALT=replace-with-random-string
+```
+
 ## Версия 3.1 — Enhanced Background Jobs
 
 Добавено:
 
-- `jobs_api.py` — reusable FastAPI job routes;
-- `/jobs` — public jobs dashboard;
-- `/api/jobs?status=&type=&limit=` — filtered job list;
-- `/api/jobs/stats` — status/type counters, duration metrics и worker info;
-- `/api/jobs/<job_id>` — детайлен job status;
+- `jobs_api.py`;
+- `/jobs` public jobs dashboard;
+- `/api/jobs?status=&type=&limit=` filtered job list;
+- `/api/jobs/stats`;
+- `/api/jobs/<job_id>`;
 - `POST /api/jobs/check`;
 - `POST /api/jobs/ai-verdict`;
 - `POST /api/jobs/real-check`;
-- `POST /api/jobs/<job_id>/cancel` — admin-protected cancel request;
-- `POST /api/jobs/<job_id>/retry` — admin-protected retry;
-- `POST /api/jobs/cleanup` — admin-protected cleanup на стари terminal jobs;
+- `POST /api/jobs/<job_id>/cancel`;
+- `POST /api/jobs/<job_id>/retry`;
+- `POST /api/jobs/cleanup`;
 - job lifecycle events;
-- `queued`, `running`, `done`, `failed`, `cancelled` statuses;
-- `started_at`, `finished_at`, `duration_seconds`, `attempt`, `parent_id`;
-- result trimming чрез `JOB_RESULT_MAX_CHARS`;
-- tests за job dashboard, stats, create/get/cancel/retry/cleanup.
-
-### Job examples
-
-```bash
-curl -X POST https://dyrakarmy-claimradar-bg.hf.space/api/jobs/check \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Инфлацията в България е 10 процента през 2024 година."}'
-```
-
-```bash
-curl https://dyrakarmy-claimradar-bg.hf.space/api/jobs/<job_id>
-```
-
-```bash
-curl -X POST https://dyrakarmy-claimradar-bg.hf.space/api/jobs/<job_id>/cancel \
-  -H "Content-Type: application/json" \
-  -d '{"admin_key":"YOUR_ADMIN_KEY","reason":"manual cancel"}'
-```
-
-```bash
-curl -X POST https://dyrakarmy-claimradar-bg.hf.space/api/jobs/<job_id>/retry \
-  -H "Content-Type: application/json" \
-  -d '{"admin_key":"YOUR_ADMIN_KEY"}'
-```
+- `queued`, `running`, `done`, `failed`, `cancelled` statuses.
 
 ## Версия 3.0 — Automated Tests
 
@@ -167,14 +195,8 @@ DB_SSLMODE=require
 ## Security / Jobs / Monitoring Variables
 
 ```bash
-RATE_LIMIT_ENABLED=1
 SECURITY_HEADERS_ENABLED=1
 MAX_REQUEST_BYTES=26214400
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_DEFAULT=120
-RATE_LIMIT_API=60
-RATE_LIMIT_HEAVY=12
-RATE_LIMIT_ABUSE=6
 JOB_WORKERS=2
 JOB_MAX_TEXT_CHARS=12000
 JOB_RETENTION=500
@@ -185,7 +207,7 @@ REQUEST_LOG_BODY=0
 MONITORING_RECENT_LIMIT=200
 MONITORING_SLOW_MS=2500
 MONITORING_LOG_FILE=data/system_events.jsonl
-ADMIN_KEY=your-secret-admin-key
+ADMIN_KEY=your-admin-key
 ```
 
 ## Search API настройки
