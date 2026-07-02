@@ -8,6 +8,9 @@ os.environ.setdefault("AUTH_ENABLED", "1")
 os.environ.setdefault("ADMIN_KEY", "test-admin-key")
 os.environ.setdefault("MODERATOR_KEY", "test-moderator-key")
 os.environ.setdefault("VIEWER_KEY", "test-viewer-key")
+os.environ.setdefault("CUSTOM_DOMAIN", "claimradar.dyrakarmy.eu")
+os.environ.setdefault("ROOT_DOMAIN", "dyrakarmy.eu")
+os.environ.setdefault("PUBLIC_BASE_URL", "https://claimradar.dyrakarmy.eu")
 os.environ.setdefault("WHISPER_MODEL_SIZE", "tiny")
 os.environ.setdefault("WHISPER_DEVICE", "cpu")
 os.environ.setdefault("WHISPER_COMPUTE_TYPE", "int8")
@@ -32,6 +35,23 @@ def test_database_schema_endpoint():
     assert response.status_code == 200
     assert "claimradar_checks" in response.text
     assert "claimradar_jobs" in response.text
+
+
+def test_custom_domain_endpoints():
+    page = client.get("/custom-domain")
+    assert page.status_code == 200
+    assert "claimradar.dyrakarmy.eu" in page.text
+
+    status = client.get("/custom-domain/status")
+    assert status.status_code == 200
+    data = status.json()
+    assert data["ok"] is True
+    assert data["custom_domain"]["custom_domain"] == "claimradar.dyrakarmy.eu"
+    assert data["custom_domain"]["recommended_dns_record"]["value"] == "hf.space"
+
+    api_status = client.get("/api/custom-domain/status")
+    assert api_status.status_code == 200
+    assert api_status.json()["ok"] is True
 
 
 def test_auth_status_and_whoami_endpoints():
