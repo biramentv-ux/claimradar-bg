@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
@@ -19,6 +19,11 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /
 /product
 /jobs
+/custom-domain
+/domain
+/custom-domain/status
+/domain/status
+/api/custom-domain/status
 /auth/status
 /api/auth/status
 /api/auth/whoami
@@ -56,6 +61,66 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
+## Версия 3.5 — Custom Domain Support
+
+Добавено:
+
+- `custom_domain.py`;
+- `/custom-domain`;
+- `/domain`;
+- `/custom-domain/status`;
+- `/domain/status`;
+- `/api/custom-domain/status`;
+- `scripts/check_custom_domain.py`;
+- `.github/workflows/custom-domain-check.yml`;
+- `docs/CUSTOM_DOMAIN_BG.md`;
+- tests за custom domain endpoints и checker script.
+
+Препоръчителен домейн:
+
+```text
+claimradar.dyrakarmy.eu
+```
+
+DNS запис в SuperHosting:
+
+```text
+Type:  CNAME
+Host:  claimradar
+Name:  claimradar.dyrakarmy.eu
+Value: hf.space
+TTL:   3600
+```
+
+Hugging Face Space Settings → Custom Domain:
+
+```text
+claimradar.dyrakarmy.eu
+```
+
+Hugging Face Variables:
+
+```bash
+PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
+CUSTOM_DOMAIN=claimradar.dyrakarmy.eu
+ROOT_DOMAIN=dyrakarmy.eu
+HF_SPACE_URL=https://dyrakarmy-claimradar-bg.hf.space
+```
+
+Проверка:
+
+```bash
+python scripts/check_custom_domain.py \
+  --domain claimradar.dyrakarmy.eu \
+  --hf-url https://dyrakarmy-claimradar-bg.hf.space
+```
+
+GitHub Actions:
+
+```text
+Actions → Custom Domain Check → Run workflow
+```
+
 ## Версия 3.4 — Real Load Testing
 
 Добавено:
@@ -64,53 +129,7 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - `.github/workflows/load-test.yml` — GitHub Actions workflow срещу реалния Hugging Face URL;
 - `docs/LOAD_TESTING_BG.md` — инструкции за стартиране и четене на резултатите;
 - `tests/test_load_test_script.py` — contract tests за load test script/workflow;
-- upload artifact `claimradar-bg-load-test-report`;
-- JSON и Markdown report:
-  - `load-test-report.json`;
-  - `load-test-report.md`.
-
-Default live target:
-
-```text
-https://dyrakarmy-claimradar-bg.hf.space
-```
-
-Default gentle profile:
-
-```text
-requests=70
-concurrency=5
-timeout=25s
-max_error_rate=0.20
-max_p95_ms=15000
-```
-
-Default endpoints:
-
-```text
-/health
-/product
-/auth/status
-/db/status
-/rate-limit/status
-/monitoring/status
-/api/jobs/stats
-```
-
-Ръчно стартиране:
-
-```bash
-python scripts/load_test.py \
-  --base-url https://dyrakarmy-claimradar-bg.hf.space \
-  --requests 70 \
-  --concurrency 5
-```
-
-GitHub Actions:
-
-```text
-Actions → Real Load Test → Run workflow
-```
+- upload artifact `claimradar-bg-load-test-report`.
 
 ## Версия 3.3 — Auth и Admin Roles
 
@@ -126,45 +145,13 @@ Actions → Real Load Test → Run workflow
 - `/api/auth/status`;
 - `/api/auth/whoami`;
 - `/api/auth/roles`;
-- `POST /api/auth/check`;
-- съвместимост със стария `ADMIN_KEY`;
-- route shadowing за jobs/rate-limit/db admin actions през новия auth wrapper;
-- smoke tests за roles, whoami и auth check.
-
-### Auth variables
-
-```bash
-AUTH_ENABLED=1
-AUTH_TOKEN_SALT=random-long-string
-OWNER_KEY=...
-ADMIN_KEY=...
-MODERATOR_KEY=...
-VIEWER_KEY=...
-```
-
-### Advanced auth map
-
-`AUTH_KEYS_JSON` позволява няколко ключа с различни роли:
-
-```json
-{
-  "main-admin": {"role": "admin", "key": "..."},
-  "factcheck-editor": {"role": "moderator", "key": "..."},
-  "readonly-user": {"role": "viewer", "key": "..."}
-}
-```
+- `POST /api/auth/check`.
 
 ## Версия 3.2 — Advanced Rate Limiting
 
-Добавено:
-
 - per-scope rate limits;
 - hashed client identity;
-- `X-RateLimit-Limit`;
-- `X-RateLimit-Remaining`;
-- `X-RateLimit-Reset`;
-- `X-RateLimit-Scope`;
-- `Retry-After` при 429;
+- rate-limit response headers;
 - temporary ban;
 - admin bypass;
 - `/rate-limit/status`;
@@ -173,11 +160,9 @@ VIEWER_KEY=...
 
 ## Версия 3.1 — Enhanced Background Jobs
 
-Добавено:
-
 - `jobs_api.py`;
 - `/jobs` public jobs dashboard;
-- `/api/jobs?status=&type=&limit=` filtered job list;
+- `/api/jobs`;
 - `/api/jobs/stats`;
 - `/api/jobs/<job_id>`;
 - `POST /api/jobs/check`;
@@ -185,9 +170,7 @@ VIEWER_KEY=...
 - `POST /api/jobs/real-check`;
 - `POST /api/jobs/<job_id>/cancel`;
 - `POST /api/jobs/<job_id>/retry`;
-- `POST /api/jobs/cleanup`;
-- job lifecycle events;
-- `queued`, `running`, `done`, `failed`, `cancelled` statuses.
+- `POST /api/jobs/cleanup`.
 
 ## Версия 3.0 — Automated Tests
 
@@ -303,7 +286,7 @@ REALTIME_INTERVAL=2.5
 ROLLING_WINDOW_MB=12
 STREAM_MAX_BUFFER_MB=60
 STREAM_LANGUAGE=bg
-PUBLIC_BASE_URL=https://dyrakarmy-claimradar-bg.hf.space
+PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
 ```
 
 ## Рапорт
