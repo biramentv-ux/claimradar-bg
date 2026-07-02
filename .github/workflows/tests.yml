@@ -31,6 +31,7 @@ jobs:
       ADMIN_KEY: "test-admin-key"
       MODERATOR_KEY: "test-moderator-key"
       VIEWER_KEY: "test-viewer-key"
+      OWASP_HARDENING_ENABLED: "1"
       CUSTOM_DOMAIN: "claimradar.dyrakarmy.eu"
       ROOT_DOMAIN: "dyrakarmy.eu"
       WHISPER_MODEL_SIZE: "tiny"
@@ -61,7 +62,7 @@ jobs:
 
       - name: Compile Python files
         run: |
-          python -m py_compile app.py launch.py persistent_launch.py auth_launch.py auth_roles.py admin_dashboard.py evidence_export.py moderation_actions.py moderation_console.py custom_domain.py db_storage.py security_jobs.py jobs_api.py persistent_jobs.py rate_limit_api.py monitoring.py search_providers.py scripts/package_extension.py scripts/load_test.py scripts/check_custom_domain.py
+          python -m py_compile app.py launch.py persistent_launch.py auth_launch.py auth_roles.py admin_dashboard.py evidence_export.py moderation_actions.py moderation_console.py owasp_hardening.py custom_domain.py db_storage.py security_jobs.py jobs_api.py persistent_jobs.py rate_limit_api.py monitoring.py search_providers.py scripts/package_extension.py scripts/load_test.py scripts/check_custom_domain.py
 
       - name: Run pytest
         run: pytest
