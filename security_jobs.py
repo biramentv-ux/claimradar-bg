@@ -18,7 +18,7 @@ SECURITY_HEADERS_ENABLED = os.getenv("SECURITY_HEADERS_ENABLED", "1").lower() no
 MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", str(25 * 1024 * 1024)))
 RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 RATE_LIMIT_DEFAULT = int(os.getenv("RATE_LIMIT_DEFAULT", "120"))
-RATE_LIMIT_PUBLIC = int(os.getenv("RATE_LIMIT_PUBLIC", "180"))
+RATE_LIMIT_PUBLIC = int(os.getenv("RATE_LIMIT_PUBLIC", "480"))
 RATE_LIMIT_API = int(os.getenv("RATE_LIMIT_API", "60"))
 RATE_LIMIT_HEAVY = int(os.getenv("RATE_LIMIT_HEAVY", "12"))
 RATE_LIMIT_ABUSE = int(os.getenv("RATE_LIMIT_ABUSE", "6"))
@@ -26,10 +26,11 @@ RATE_LIMIT_JOBS = int(os.getenv("RATE_LIMIT_JOBS", "20"))
 RATE_LIMIT_WS = int(os.getenv("RATE_LIMIT_WS", "20"))
 RATE_LIMIT_SEARCH = int(os.getenv("RATE_LIMIT_SEARCH", "45"))
 RATE_LIMIT_ADMIN = int(os.getenv("RATE_LIMIT_ADMIN", "30"))
-RATE_LIMIT_STATUS = int(os.getenv("RATE_LIMIT_STATUS", "60"))
+RATE_LIMIT_STATUS = int(os.getenv("RATE_LIMIT_STATUS", "120"))
 RATE_LIMIT_BAN_THRESHOLD = int(os.getenv("RATE_LIMIT_BAN_THRESHOLD", "8"))
 RATE_LIMIT_BAN_SECONDS = int(os.getenv("RATE_LIMIT_BAN_SECONDS", "300"))
 RATE_LIMIT_ADMIN_BYPASS = os.getenv("RATE_LIMIT_ADMIN_BYPASS", "1").lower() not in {"0", "false", "no"}
+RATE_LIMIT_EXEMPT_UI_GETS = os.getenv("RATE_LIMIT_EXEMPT_UI_GETS", "1").lower() not in {"0", "false", "no"}
 RATE_LIMIT_HASH_SALT = os.getenv("RATE_LIMIT_HASH_SALT", "claimradar-bg-rate-limit")
 JOB_WORKERS = int(os.getenv("JOB_WORKERS", "2"))
 JOB_RETENTION = int(os.getenv("JOB_RETENTION", "500"))
@@ -38,6 +39,7 @@ JOB_RESULT_MAX_CHARS = int(os.getenv("JOB_RESULT_MAX_CHARS", "50000"))
 TERMINAL_STATUSES = {"done", "failed", "cancelled"}
 RUNNING_STATUSES = {"queued", "running"}
 PUBLIC_PAGE_PREFIXES = (
+    "/",
     "/check/",
     "/product",
     "/about",
@@ -55,6 +57,36 @@ ADMIN_PREFIXES = (
     "/api/monitoring/event",
     "/api/db/migrate-jsonl",
     "/api/rate-limit/reset",
+)
+RATE_LIMIT_EXEMPT_PATHS = {
+    "/",
+    "/health",
+    "/config",
+    "/info",
+    "/api_info",
+    "/favicon.ico",
+    "/manifest.json",
+    "/robots.txt",
+    "/theme.css",
+}
+RATE_LIMIT_EXEMPT_PREFIXES = (
+    "/assets/",
+    "/static/",
+    "/file=",
+    "/proxy=",
+    "/gradio_api/",
+    "/queue/status",
+    "/celery/status",
+    "/telemetry/status",
+    "/sentry/status",
+    "/observability/status",
+    "/api/queue/status",
+    "/api/celery/status",
+    "/api/telemetry/status",
+    "/api/sentry/status",
+    "/api/security/owasp/status",
+    "/api/inference/status",
+    "/api/custom-domain/status",
 )
 
 
@@ -87,6 +119,17 @@ def safe_identity(raw_identity: str) -> str:
     return hmac.new(secret, msg, hashlib.sha256).hexdigest()[:18]
 
 
+def is_rate_limit_exempt_request(request: Request) -> bool:
+    if not RATE_LIMIT_EXEMPT_UI_GETS:
+        return False
+    if request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+        return False
+    path = request.url.path or "/"
+    if path in RATE_LIMIT_EXEMPT_PATHS:
+        return True
+    return any(path.startswith(prefix) for prefix in RATE_LIMIT_EXEMPT_PREFIXES)
+
+
 class InMemoryRateLimiter:
     def __init__(self):
         self.hits: Dict[str, deque] = defaultdict(deque)
@@ -95,8 +138,11 @@ class InMemoryRateLimiter:
         self.scope_counts: Counter = Counter()
         self.rejected_total = 0
         self.allowed_total = 0
+        self.exempt_total = 0
 
     def scope_for_path(self, path: str) -> str:
+        if path == "/":
+            return "public"
         if path.startswith("/api/report-abuse"):
             return "abuse"
         if path.startswith("/api/jobs") or path == "/jobs":
@@ -251,6 +297,8 @@ class InMemoryRateLimiter:
             "ban_threshold": RATE_LIMIT_BAN_THRESHOLD,
             "ban_seconds": RATE_LIMIT_BAN_SECONDS,
             "admin_bypass": RATE_LIMIT_ADMIN_BYPASS,
+            "exempt_ui_gets": RATE_LIMIT_EXEMPT_UI_GETS,
+            "exempt_total": self.exempt_total,
             "active_bucket_count": len(active_buckets),
             "banned_count": len(banned),
             "violations_count": sum(self.violations.values()),
@@ -276,7 +324,8 @@ class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
 
         rate_decision: Dict[str, Any] | None = None
         admin_bypass = False
-        if RATE_LIMIT_ENABLED:
+        exempt_bypass = is_rate_limit_exempt_request(request)
+        if RATE_LIMIT_ENABLED and not exempt_bypass:
             admin_key = admin_key_from_request(request)
             configured = configured_admin_key()
             admin_bypass = bool(RATE_LIMIT_ADMIN_BYPASS and configured and admin_key == configured)
@@ -299,6 +348,9 @@ class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
+        if exempt_bypass and RATE_LIMIT_ENABLED:
+            rate_limiter.exempt_total += 1
+            response.headers.setdefault("X-RateLimit-Bypass", "safe-ui-get")
         if rate_decision:
             for key, value in rate_limiter.headers(rate_decision).items():
                 response.headers.setdefault(key, value)
@@ -531,6 +583,7 @@ def security_status() -> Dict[str, Any]:
         "rate_limit_ban_seconds": RATE_LIMIT_BAN_SECONDS,
         "rate_limit_status": RATE_LIMIT_STATUS,
         "rate_limit_admin_bypass": RATE_LIMIT_ADMIN_BYPASS,
+        "rate_limit_exempt_ui_gets": RATE_LIMIT_EXEMPT_UI_GETS,
         "job_workers": JOB_WORKERS,
         "job_retention": JOB_RETENTION,
         "job_result_max_chars": JOB_RESULT_MAX_CHARS,
