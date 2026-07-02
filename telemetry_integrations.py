@@ -4,9 +4,9 @@ import os
 import time
 import uuid
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Callable, Dict, Iterator, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", os.getenv("SERVICE_NAME", "claimradar-bg"))
@@ -21,6 +21,23 @@ SENTRY_ENABLED = os.getenv("SENTRY_ENABLED", "1").lower() not in {"0", "false", 
 SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 SENTRY_TRACES_SAMPLE_RATE = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
 SENTRY_PROFILES_SAMPLE_RATE = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0"))
+SENTRY_SEND_DEFAULT_PII = os.getenv("SENTRY_SEND_DEFAULT_PII", "0").lower() in {"1", "true", "yes"}
+SENTRY_TEST_EVENTS_ENABLED = os.getenv("SENTRY_TEST_EVENTS_ENABLED", "1").lower() not in {"0", "false", "no"}
+
+SENSITIVE_KEYWORDS = {
+    "admin_key",
+    "api_key",
+    "auth_token",
+    "authorization",
+    "cookie",
+    "dsn",
+    "jwt",
+    "key",
+    "password",
+    "secret",
+    "session",
+    "token",
+}
 
 _TELEMETRY_STATE: Dict[str, Any] = {
     "initialized": False,
@@ -32,6 +49,9 @@ _TELEMETRY_STATE: Dict[str, Any] = {
     "sentry_available": False,
     "sentry_configured": bool(SENTRY_DSN),
     "sentry_error": "",
+    "sentry_last_event_id": "",
+    "sentry_last_test_event_id": "",
+    "sentry_scrubber_enabled": True,
     "last_manual_span": None,
     "init_ts": None,
 }
@@ -43,6 +63,32 @@ def _resource_attributes() -> Dict[str, str]:
         "service.version": SERVICE_VERSION,
         "deployment.environment": DEPLOYMENT_ENVIRONMENT,
     }
+
+
+def _is_sensitive_key(key: Any) -> bool:
+    key_l = str(key).lower()
+    return any(token in key_l for token in SENSITIVE_KEYWORDS)
+
+
+def scrub_sensitive(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: "[Filtered]" if _is_sensitive_key(key) else scrub_sensitive(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [scrub_sensitive(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(scrub_sensitive(item) for item in value)
+    return value
+
+
+def sentry_before_send(event: Dict[str, Any], hint: Dict[str, Any]) -> Dict[str, Any] | None:
+    event = scrub_sensitive(event)
+    event.setdefault("tags", {})["service.name"] = SERVICE_NAME
+    event.setdefault("tags", {})["deployment.environment"] = DEPLOYMENT_ENVIRONMENT
+    return event
+
+
+def sentry_before_breadcrumb(crumb: Dict[str, Any], hint: Dict[str, Any]) -> Dict[str, Any] | None:
+    return scrub_sensitive(crumb)
 
 
 def init_sentry() -> Dict[str, Any]:
@@ -63,10 +109,13 @@ def init_sentry() -> Dict[str, Any]:
             release=SERVICE_VERSION,
             traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
             profiles_sample_rate=SENTRY_PROFILES_SAMPLE_RATE,
-            integrations=[FastApiIntegration(), StarletteIntegration()],
-            send_default_pii=False,
+            integrations=[FastApiIntegration(transaction_style="endpoint"), StarletteIntegration(transaction_style="endpoint")],
+            send_default_pii=SENTRY_SEND_DEFAULT_PII,
+            before_send=sentry_before_send,
+            before_breadcrumb=sentry_before_breadcrumb,
         )
         sentry_sdk.set_tag("service.name", SERVICE_NAME)
+        sentry_sdk.set_tag("deployment.environment", DEPLOYMENT_ENVIRONMENT)
         _TELEMETRY_STATE.update({"sentry_available": True, "sentry_configured": True, "sentry_error": ""})
     except Exception as exc:
         _TELEMETRY_STATE.update({"sentry_available": False, "sentry_error": str(exc)[:500]})
@@ -132,10 +181,16 @@ def telemetry_status() -> Dict[str, Any]:
         },
         "sentry": {
             "enabled": SENTRY_ENABLED,
+            "available": _TELEMETRY_STATE.get("sentry_available", False),
             "dsn_configured": bool(SENTRY_DSN),
             "environment": DEPLOYMENT_ENVIRONMENT,
+            "send_default_pii": SENTRY_SEND_DEFAULT_PII,
+            "scrubber_enabled": True,
+            "test_events_enabled": SENTRY_TEST_EVENTS_ENABLED,
             "traces_sample_rate": SENTRY_TRACES_SAMPLE_RATE,
             "profiles_sample_rate": SENTRY_PROFILES_SAMPLE_RATE,
+            "last_event_id": _TELEMETRY_STATE.get("sentry_last_event_id", ""),
+            "last_test_event_id": _TELEMETRY_STATE.get("sentry_last_test_event_id", ""),
         },
     }
 
@@ -168,13 +223,38 @@ def capture_exception(exc: Exception, **context: Any) -> str:
         import sentry_sdk
 
         with sentry_sdk.push_scope() as scope:
-            for key, value in context.items():
+            for key, value in scrub_sensitive(context).items():
                 scope.set_extra(str(key), value)
             captured = sentry_sdk.capture_exception(exc)
             event_id = str(captured or "")
+            _TELEMETRY_STATE["sentry_last_event_id"] = event_id
     except Exception as sentry_exc:
         _TELEMETRY_STATE["sentry_error"] = str(sentry_exc)[:500]
     return event_id
+
+
+def capture_message(message: str, level: str = "info", **context: Any) -> str:
+    event_id = ""
+    try:
+        import sentry_sdk
+
+        with sentry_sdk.push_scope() as scope:
+            for key, value in scrub_sensitive(context).items():
+                scope.set_extra(str(key), value)
+            captured = sentry_sdk.capture_message(message[:500], level=level)
+            event_id = str(captured or "")
+            _TELEMETRY_STATE["sentry_last_event_id"] = event_id
+    except Exception as sentry_exc:
+        _TELEMETRY_STATE["sentry_error"] = str(sentry_exc)[:500]
+    return event_id
+
+
+def _extract_admin_key(request: Request, payload: Dict[str, Any] | None = None) -> str:
+    payload = payload or {}
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return str(payload.get("admin_key") or payload.get("api_key") or request.query_params.get("admin_key") or request.headers.get("x-admin-key") or request.headers.get("x-api-key") or "")
 
 
 def register_telemetry_routes(app: FastAPI) -> None:
@@ -190,3 +270,50 @@ def register_telemetry_routes(app: FastAPI) -> None:
     def api_telemetry_test_span():
         with traced_span("claimradar.test_span", route="/api/telemetry/test-span") as span:
             return JSONResponse({"ok": True, "span": span, "telemetry": telemetry_status()})
+
+
+def register_sentry_routes(app: FastAPI, can_admin: Callable[[str], bool]) -> None:
+    @app.get("/sentry/status")
+    def public_sentry_status():
+        return JSONResponse({"ok": True, "sentry": telemetry_status()["sentry"]})
+
+    @app.get("/api/sentry/status")
+    def api_sentry_status():
+        return JSONResponse({"ok": True, "sentry": telemetry_status()["sentry"]})
+
+    @app.post("/api/sentry/test-event")
+    async def api_sentry_test_event(request: Request):
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        if not can_admin(_extract_admin_key(request, payload)):
+            return JSONResponse({"ok": False, "error": "admin_required"}, status_code=403)
+        if not SENTRY_TEST_EVENTS_ENABLED:
+            return JSONResponse({"ok": False, "error": "sentry_test_events_disabled"}, status_code=403)
+        event_id = capture_message(
+            str(payload.get("message") or "ClaimRadar BG Sentry test event"),
+            level=str(payload.get("level") or "info"),
+            test=True,
+            route="/api/sentry/test-event",
+            payload_preview=scrub_sensitive(payload),
+        )
+        _TELEMETRY_STATE["sentry_last_test_event_id"] = event_id
+        return JSONResponse({"ok": True, "event_id": event_id, "sentry": telemetry_status()["sentry"]})
+
+    @app.post("/api/sentry/test-error")
+    async def api_sentry_test_error(request: Request):
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        if not can_admin(_extract_admin_key(request, payload)):
+            return JSONResponse({"ok": False, "error": "admin_required"}, status_code=403)
+        if not SENTRY_TEST_EVENTS_ENABLED:
+            return JSONResponse({"ok": False, "error": "sentry_test_events_disabled"}, status_code=403)
+        try:
+            raise RuntimeError(str(payload.get("message") or "ClaimRadar BG controlled Sentry test error"))
+        except RuntimeError as exc:
+            event_id = capture_exception(exc, route="/api/sentry/test-error", payload_preview=scrub_sensitive(payload), test=True)
+            _TELEMETRY_STATE["sentry_last_test_event_id"] = event_id
+            return JSONResponse({"ok": True, "captured": True, "event_id": event_id, "sentry": telemetry_status()["sentry"]})
