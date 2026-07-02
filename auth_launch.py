@@ -13,13 +13,14 @@ from custom_domain import register_custom_domain_routes
 from db_storage import storage
 from evidence_export import register_evidence_export_routes
 from jobs_api import register_job_routes
+from moderation_actions import register_moderation_routes
 from monitoring import MonitoringMiddleware
 from rate_limit_api import register_rate_limit_routes
 from security_jobs import SecurityAndRateLimitMiddleware
 
 persistent.can_admin = is_admin_key
 
-app = FastAPI(title="ClaimRadar BG Auth Layer", version="3.7-evidence-export")
+app = FastAPI(title="ClaimRadar BG Auth Layer", version="3.8-moderation-actions")
 app.add_middleware(SecurityAndRateLimitMiddleware)
 app.add_middleware(MonitoringMiddleware)
 
@@ -60,6 +61,7 @@ register_job_routes(
 )
 register_admin_dashboard_routes(app, can_admin, storage, base_launch.job_store, persistent._original_read_jsonl)
 register_evidence_export_routes(app, can_admin, storage, persistent._original_read_jsonl, base_launch.visibility_for)
+register_moderation_routes(app, can_admin, persistent._original_read_jsonl)
 
 
 @app.post("/api/db/migrate-jsonl")
