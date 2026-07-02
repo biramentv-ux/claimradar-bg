@@ -1,0 +1,79 @@
+name: Real Load Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/load_test.py"
+      - ".github/workflows/load-test.yml"
+      - "docs/LOAD_TESTING_BG.md"
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Target base URL"
+        required: false
+        default: "https://dyrakarmy-claimradar-bg.hf.space"
+      requests:
+        description: "Total requests"
+        required: false
+        default: "70"
+      concurrency:
+        description: "Concurrent workers"
+        required: false
+        default: "5"
+      max_error_rate:
+        description: "Max allowed error rate"
+        required: false
+        default: "0.20"
+      max_p95_ms:
+        description: "Max allowed p95 latency in ms"
+        required: false
+        default: "15000"
+
+jobs:
+  gentle-live-load-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LOAD_TEST_BASE_URL: ${{ github.event.inputs.base_url || 'https://dyrakarmy-claimradar-bg.hf.space' }}
+      LOAD_TEST_REQUESTS: ${{ github.event.inputs.requests || '70' }}
+      LOAD_TEST_CONCURRENCY: ${{ github.event.inputs.concurrency || '5' }}
+      LOAD_TEST_MAX_ERROR_RATE: ${{ github.event.inputs.max_error_rate || '0.20' }}
+      LOAD_TEST_MAX_P95_MS: ${{ github.event.inputs.max_p95_ms || '15000' }}
+      LOAD_TEST_PROFILE: gentle-live
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Wait briefly for deployment sync
+        run: sleep 30
+
+      - name: Run real load test
+        run: |
+          python scripts/load_test.py \
+            --base-url "$LOAD_TEST_BASE_URL" \
+            --requests "$LOAD_TEST_REQUESTS" \
+            --concurrency "$LOAD_TEST_CONCURRENCY" \
+            --max-error-rate "$LOAD_TEST_MAX_ERROR_RATE" \
+            --max-p95-ms "$LOAD_TEST_MAX_P95_MS" \
+            --profile "$LOAD_TEST_PROFILE"
+
+      - name: Add report to job summary
+        if: always()
+        run: |
+          if [ -f load-test-results/load-test-report.md ]; then
+            cat load-test-results/load-test-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload load test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claimradar-bg-load-test-report
+          path: load-test-results/*
+          if-no-files-found: warn
