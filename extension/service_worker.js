@@ -1,4 +1,5 @@
 const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
+const CONTENT_SCRIPT_FILES = ['content.js', 'audio_controls.js'];
 
 async function hasOffscreenDocument() {
   if (!chrome.offscreen || !chrome.runtime.getContexts) return false;
@@ -16,6 +17,15 @@ async function setupOffscreenDocument() {
     reasons: ['USER_MEDIA'],
     justification: 'Capture current tab audio for user-started Bulgarian realtime speech-to-text transcription.'
   });
+}
+
+async function injectContentScripts(tabId) {
+  if (!tabId || !chrome.scripting) return { ok: false, error: 'missing_tab_or_scripting_api' };
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: CONTENT_SCRIPT_FILES
+  });
+  return { ok: true, injected: CONTENT_SCRIPT_FILES };
 }
 
 async function getDefaultConfig() {
@@ -50,6 +60,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === 'CR_SAVE_CONFIG') {
       await chrome.storage.sync.set(message.config || {});
       sendResponse({ ok: true });
+      return;
+    }
+
+    if (message?.type === 'CR_INJECT_CONTENT') {
+      sendResponse(await injectContentScripts(message.tabId));
       return;
     }
 
