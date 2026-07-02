@@ -34,13 +34,27 @@ async function saveConfig() {
   return config;
 }
 
+async function ensureOverlayInActiveTab(tabId) {
+  const result = await chrome.runtime.sendMessage({ type: 'CR_INJECT_CONTENT', tabId }).catch(error => ({ ok: false, error: String(error?.message || error) }));
+  if (!result?.ok) {
+    setStatus('Не мога да inject-на overlay в този tab. Отвори нормална https страница и пробвай пак.');
+    return false;
+  }
+  return true;
+}
+
 async function pushConfigToActiveTab() {
   const config = await saveConfig();
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id) {
-    await chrome.tabs.sendMessage(tab.id, { type: 'CR_CONFIG_UPDATED', config }).catch(() => null);
+    const injected = await ensureOverlayInActiveTab(tab.id);
+    if (injected) {
+      await chrome.tabs.sendMessage(tab.id, { type: 'CR_CONFIG_UPDATED', config }).catch(() => null);
+      setStatus('Overlay е приложен към текущия tab.');
+      return;
+    }
   }
-  setStatus('Приложено към текущия tab.');
+  setStatus('Няма активен tab за прилагане.');
 }
 
 async function renderHistory() {
