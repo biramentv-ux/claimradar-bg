@@ -1,0 +1,58 @@
+name: Custom Domain Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "custom_domain.py"
+      - "scripts/check_custom_domain.py"
+      - "docs/CUSTOM_DOMAIN_BG.md"
+      - ".github/workflows/custom-domain-check.yml"
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Custom domain to check"
+        required: false
+        default: "claimradar.dyrakarmy.eu"
+      hf_url:
+        description: "Hugging Face fallback URL"
+        required: false
+        default: "https://dyrakarmy-claimradar-bg.hf.space"
+
+jobs:
+  custom-domain-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CUSTOM_DOMAIN: ${{ github.event.inputs.domain || 'claimradar.dyrakarmy.eu' }}
+      HF_SPACE_URL: ${{ github.event.inputs.hf_url || 'https://dyrakarmy-claimradar-bg.hf.space' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check custom domain
+        continue-on-error: true
+        run: |
+          python scripts/check_custom_domain.py \
+            --domain "$CUSTOM_DOMAIN" \
+            --hf-url "$HF_SPACE_URL"
+
+      - name: Add report to job summary
+        if: always()
+        run: |
+          if [ -f custom-domain-results/custom-domain-report.md ]; then
+            cat custom-domain-results/custom-domain-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload custom domain report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claimradar-bg-custom-domain-report
+          path: custom-domain-results/*
+          if-no-files-found: warn
