@@ -47,6 +47,15 @@ def test_gradio_api_info_get_does_not_create_temporary_ban():
     assert rate_limit_status()["banned_count"] == 0
 
 
+def test_huggingface_app_tab_can_embed_ui():
+    client = make_client()
+    response = client.get("/")
+    assert response.status_code == 200
+    csp = response.headers.get("content-security-policy", "")
+    assert "frame-ancestors" in csp
+    assert "huggingface.co" in csp
+
+
 def test_api_post_still_gets_limited():
     client = make_client()
     saw_429 = False
