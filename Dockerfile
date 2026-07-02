@@ -13,7 +13,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MAX_MEDIA_MB=80 \
     DB_ENABLED=1 \
     DB_SSLMODE=require \
-    AUTH_ENABLED=1
+    AUTH_ENABLED=1 \
+    JOB_EXECUTION_MODE=thread \
+    QUEUE_WORKER_AUTOSTART=0
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg curl fonts-dejavu-core \
@@ -26,7 +28,8 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY . /app
+RUN chmod +x /app/scripts/start_production.sh
 
 EXPOSE 7860
 
-CMD ["python", "auth_launch.py"]
+CMD ["/bin/sh", "/app/scripts/start_production.sh"]
