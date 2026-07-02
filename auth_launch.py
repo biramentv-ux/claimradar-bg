@@ -16,14 +16,16 @@ from jobs_api import register_job_routes
 from moderation_actions import register_moderation_routes
 from moderation_console import register_moderation_console_routes
 from monitoring import MonitoringMiddleware
+from owasp_hardening import OWASPHardeningMiddleware, register_owasp_routes
 from rate_limit_api import register_rate_limit_routes
 from security_jobs import SecurityAndRateLimitMiddleware
 
 persistent.can_admin = is_admin_key
 
-app = FastAPI(title="ClaimRadar BG Auth Layer", version="3.8-moderation-actions")
+app = FastAPI(title="ClaimRadar BG Auth Layer", version="3.9-owasp-hardening")
 app.add_middleware(SecurityAndRateLimitMiddleware)
 app.add_middleware(MonitoringMiddleware)
+app.add_middleware(OWASPHardeningMiddleware)
 
 
 def can_admin(admin_key: str = "") -> bool:
@@ -51,6 +53,7 @@ def migrate_jsonl_to_db() -> dict:
 
 register_custom_domain_routes(app)
 register_auth_routes(app, can_admin)
+register_owasp_routes(app)
 register_rate_limit_routes(app, can_admin)
 register_job_routes(
     app,
