@@ -5,6 +5,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 import app as app_module
+from hardware_inference import configure_app_module, register_inference_routes
+
+configure_app_module(app_module)
+
 import launch as base_launch
 import persistent_launch as persistent
 from admin_dashboard import register_admin_dashboard_routes
@@ -22,7 +26,7 @@ from security_jobs import SecurityAndRateLimitMiddleware
 
 persistent.can_admin = is_admin_key
 
-app = FastAPI(title="ClaimRadar BG Auth Layer", version="3.9-owasp-hardening")
+app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.0-gpu-dedicated-inference")
 app.add_middleware(SecurityAndRateLimitMiddleware)
 app.add_middleware(MonitoringMiddleware)
 app.add_middleware(OWASPHardeningMiddleware)
@@ -53,6 +57,7 @@ def migrate_jsonl_to_db() -> dict:
 
 register_custom_domain_routes(app)
 register_auth_routes(app, can_admin)
+register_inference_routes(app, app_module)
 register_owasp_routes(app)
 register_rate_limit_routes(app, can_admin)
 register_job_routes(
