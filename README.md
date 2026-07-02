@@ -48,7 +48,7 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /custom-domain/status
 /domain/status
 /api/custom-domain/status
-auth/status
+/auth/status
 /api/auth/status
 /api/auth/whoami
 /api/auth/roles
