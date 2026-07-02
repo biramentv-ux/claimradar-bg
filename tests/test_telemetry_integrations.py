@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import auth_launch
-from telemetry_integrations import init_telemetry, telemetry_status, traced_span
+from telemetry_integrations import init_telemetry, scrub_sensitive, sentry_before_send, telemetry_status, traced_span
 
 client = TestClient(auth_launch.app)
 
@@ -32,6 +32,57 @@ def test_telemetry_status_endpoint_has_expected_sections():
     assert "otel" in telemetry
     assert "sentry" in telemetry
     assert telemetry["service"]["service.name"] == "claimradar-bg"
+
+
+def test_sentry_status_endpoint_has_expected_sections():
+    response = client.get("/api/sentry/status")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    sentry = payload["sentry"]
+    assert "enabled" in sentry
+    assert "scrubber_enabled" in sentry
+    assert sentry["send_default_pii"] in {True, False}
+
+
+def test_sentry_test_event_requires_admin_and_returns_shape():
+    denied = client.post("/api/sentry/test-event", json={"message": "hello"})
+    assert denied.status_code == 403
+    allowed = client.post("/api/sentry/test-event", json={"admin_key": "test-admin-key", "message": "hello"})
+    assert allowed.status_code == 200
+    payload = allowed.json()
+    assert payload["ok"] is True
+    assert "event_id" in payload
+    assert "sentry" in payload
+
+
+def test_sentry_test_error_requires_admin_and_returns_shape():
+    denied = client.post("/api/sentry/test-error", json={"message": "boom"})
+    assert denied.status_code == 403
+    allowed = client.post("/api/sentry/test-error", json={"admin_key": "test-admin-key", "message": "controlled test"})
+    assert allowed.status_code == 200
+    payload = allowed.json()
+    assert payload["ok"] is True
+    assert payload["captured"] is True
+    assert "event_id" in payload
+
+
+def test_sentry_scrubber_filters_sensitive_values():
+    data = {"admin_key": "redacted", "nested": {"Authorization": "redacted", "safe": "ok"}, "items": [{"api_key": "redacted"}]}
+    scrubbed = scrub_sensitive(data)
+    assert scrubbed["admin_key"] == "[Filtered]"
+    assert scrubbed["nested"]["Authorization"] == "[Filtered]"
+    assert scrubbed["nested"]["safe"] == "ok"
+    assert scrubbed["items"][0]["api_key"] == "[Filtered]"
+
+
+def test_sentry_before_send_scrubs_and_tags_event():
+    event = {"extra": {"token": "redacted", "safe": "ok"}, "request": {"headers": {"cookie": "redacted"}}}
+    result = sentry_before_send(event, {})
+    assert result["extra"]["token"] == "[Filtered]"
+    assert result["extra"]["safe"] == "ok"
+    assert result["request"]["headers"]["cookie"] == "[Filtered]"
+    assert result["tags"]["service.name"] == "claimradar-bg"
 
 
 def test_test_span_endpoint_returns_span_shape():
