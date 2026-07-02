@@ -11,9 +11,9 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
-## Основни публични страници
+## Основни публични страници и endpoints
 
 ```text
 /
@@ -24,6 +24,9 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/admin/abuse-reports
 /api/admin/recent-checks
 /api/admin/logs
+/api/export/check/<check_id>
+/export/check/<check_id>.md
+/export/check/<check_id>.pdf
 /jobs
 /custom-domain
 /domain
@@ -67,64 +70,55 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
+## Версия 3.7 — Evidence Quality Scoring + Exports
+
+Добавено:
+
+- `evidence_export.py`;
+- evidence quality scoring за всеки evidence/source;
+- JSON evidence bundle: `/api/export/check/<check_id>`;
+- Markdown export: `/export/check/<check_id>.md`;
+- PDF export: `/export/check/<check_id>.pdf`;
+- privacy protection за private checks — export изисква admin/owner ключ;
+- `reportlab==4.2.5` за PDF export;
+- `fonts-dejavu-core` в Dockerfile за кирилица в PDF;
+- tests за scoring, JSON export, Markdown export, PDF export и private export protection.
+
+Evidence scoring взема предвид:
+
+```text
+официален/първичен домейн
+fact-check или публичен източник
+automatic vs manual search result
+текстово съвпадение с claim
+числово/годишно съвпадение
+дали evidence е цитирано във verdict
+```
+
+Пример:
+
+```bash
+curl https://claimradar.dyrakarmy.eu/api/export/check/<check_id>
+```
+
+```bash
+curl -L https://claimradar.dyrakarmy.eu/export/check/<check_id>.md -o claimradar-report.md
+curl -L https://claimradar.dyrakarmy.eu/export/check/<check_id>.pdf -o claimradar-report.pdf
+```
+
 ## Версия 3.6 — Admin Dashboard
 
 Добавено:
 
 - `admin_dashboard.py`;
 - `/admin` — protected HTML dashboard;
-- `/api/admin/status` — общ admin status bundle;
-- `/api/admin/system` — system/db/security/rate-limit/monitoring/custom-domain summary;
-- `/api/admin/abuse-reports` — последни abuse reports;
-- `/api/admin/recent-checks` — последни проверки;
-- `/api/admin/logs` — admin logs facade;
-- интеграция в `auth_launch.py`;
-- smoke tests за 403 без ключ и 200 с admin/owner ключ;
-- static contract tests и CI compile update.
-
-Dashboard-ът показва:
-
-```text
-DB status
-storage mode: postgres/jsonl_fallback
-monitoring metrics
-jobs stats
-rate limit status
-custom domain config
-recent checks
-recent jobs
-abuse reports
-feedback
-quick links към важните системни страници
-```
-
-Достъп:
-
-```text
-/admin?admin_key=YOUR_ADMIN_KEY
-```
-
-или към JSON endpoint-ите:
-
-```bash
-curl https://claimradar.dyrakarmy.eu/api/admin/status \
-  -H "Authorization: Bearer YOUR_ADMIN_KEY"
-```
+- `/api/admin/status`;
+- `/api/admin/system`;
+- `/api/admin/abuse-reports`;
+- `/api/admin/recent-checks`;
+- `/api/admin/logs`.
 
 ## Версия 3.5 — Custom Domain Support
-
-Добавено:
-
-- `custom_domain.py`;
-- `/custom-domain`;
-- `/domain`;
-- `/custom-domain/status`;
-- `/domain/status`;
-- `/api/custom-domain/status`;
-- `scripts/check_custom_domain.py`;
-- `.github/workflows/custom-domain-check.yml`;
-- `docs/CUSTOM_DOMAIN_BG.md`;
-- tests за custom domain endpoints и checker script.
 
 Препоръчителен домейн:
 
@@ -142,12 +136,6 @@ Value: hf.space
 TTL:   3600
 ```
 
-Hugging Face Space Settings → Custom Domain:
-
-```text
-claimradar.dyrakarmy.eu
-```
-
 Hugging Face Variables:
 
 ```bash
@@ -159,29 +147,18 @@ HF_SPACE_URL=https://dyrakarmy-claimradar-bg.hf.space
 
 ## Версия 3.4 — Real Load Testing
 
-Добавено:
-
-- `scripts/load_test.py` — production-safe HTTP load test script без външни зависимости;
-- `.github/workflows/load-test.yml` — GitHub Actions workflow срещу реалния Hugging Face URL;
-- `docs/LOAD_TESTING_BG.md` — инструкции за стартиране и четене на резултатите;
-- `tests/test_load_test_script.py` — contract tests за load test script/workflow;
-- upload artifact `claimradar-bg-load-test-report`.
+- `scripts/load_test.py`;
+- `.github/workflows/load-test.yml`;
+- `docs/LOAD_TESTING_BG.md`;
+- artifact `claimradar-bg-load-test-report`.
 
 ## Версия 3.3 — Auth и Admin Roles
-
-Добавено:
 
 - `auth_roles.py`;
 - `auth_launch.py`;
 - Dockerfile стартира `auth_launch.py`;
 - роли: `anonymous`, `viewer`, `moderator`, `admin`, `owner`;
-- permission map за роли;
-- support за `Authorization: Bearer`, `x-api-key`, `x-admin-key`, `x-claimradar-admin-key` и query token;
-- `/auth/status`;
-- `/api/auth/status`;
-- `/api/auth/whoami`;
-- `/api/auth/roles`;
-- `POST /api/auth/check`.
+- `/auth/status`, `/api/auth/whoami`, `/api/auth/roles`, `/api/auth/check`.
 
 ## Версия 3.2 — Advanced Rate Limiting
 
@@ -197,16 +174,10 @@ HF_SPACE_URL=https://dyrakarmy-claimradar-bg.hf.space
 ## Версия 3.1 — Enhanced Background Jobs
 
 - `jobs_api.py`;
-- `/jobs` public jobs dashboard;
-- `/api/jobs`;
-- `/api/jobs/stats`;
-- `/api/jobs/<job_id>`;
-- `POST /api/jobs/check`;
-- `POST /api/jobs/ai-verdict`;
-- `POST /api/jobs/real-check`;
-- `POST /api/jobs/<job_id>/cancel`;
-- `POST /api/jobs/<job_id>/retry`;
-- `POST /api/jobs/cleanup`.
+- `/jobs` dashboard;
+- `/api/jobs`, `/api/jobs/stats`, `/api/jobs/<job_id>`;
+- `POST /api/jobs/check`, `POST /api/jobs/ai-verdict`, `POST /api/jobs/real-check`;
+- cancel/retry/cleanup.
 
 ## Версия 3.0 — Automated Tests
 
@@ -219,14 +190,10 @@ pytest
 ## Версия 2.9 — Monitoring и Logging
 
 - `monitoring.py`;
-- request logging middleware;
 - `X-Request-ID` response header;
 - latency/status metrics;
-- JSONL event log в `data/system_events.jsonl`;
-- `/monitoring/status`;
-- `/monitoring/metrics`;
-- admin-protected `/monitoring/logs`;
-- admin-protected `POST /api/monitoring/event`.
+- JSONL event log;
+- `/monitoring/status`, `/monitoring/metrics`, `/monitoring/logs`.
 
 ## Версия 2.8 — Legal и Methodology Pages
 
@@ -236,8 +203,7 @@ pytest
 - `/terms`;
 - `/sources`;
 - `/contact`;
-- `/legal-methodology.md`;
-- `LEGAL_METHODOLOGY_BG.md`.
+- `/legal-methodology.md`.
 
 ## Версия 2.7 — Supabase/PostgreSQL Persistent Storage
 
@@ -245,10 +211,7 @@ pytest
 - `db_storage.py`;
 - `persistent_launch.py`;
 - `psycopg[binary]`;
-- `/db/status` и `/api/db/status`;
-- `/api/db/schema`;
-- `POST /api/db/migrate-jsonl`;
-- JSONL остава backup/fallback, ако базата не е конфигурирана.
+- JSONL fallback при липсваща база.
 
 ## Database variables
 
@@ -283,6 +246,7 @@ JOB_WORKERS=2
 JOB_MAX_TEXT_CHARS=12000
 JOB_RETENTION=500
 JOB_RESULT_MAX_CHARS=50000
+EXPORT_MAX_ITEMS=40
 MONITORING_ENABLED=1
 REQUEST_LOG_ENABLED=1
 REQUEST_LOG_BODY=0
@@ -323,14 +287,6 @@ ROLLING_WINDOW_MB=12
 STREAM_MAX_BUFFER_MB=60
 STREAM_LANGUAGE=bg
 PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
-```
-
-## Рапорт
-
-Подробният технически рапорт е в:
-
-```text
-PROJECT_REPORT_BG.md
 ```
 
 ## Дисклеймър
