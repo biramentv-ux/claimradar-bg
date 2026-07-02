@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, GPU/dedicated inference option, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници и endpoints
 
@@ -26,6 +26,9 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/admin/abuse-reports
 /api/admin/recent-checks
 /api/admin/logs
+/inference/status
+/api/inference/status
+/api/inference/recommendation
 /security/owasp/status
 /api/security/owasp/status
 /api/moderation/actions
@@ -45,7 +48,7 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /custom-domain/status
 /domain/status
 /api/custom-domain/status
-/auth/status
+auth/status
 /api/auth/status
 /api/auth/whoami
 /api/auth/roles
@@ -82,82 +85,67 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
-## Версия 3.9 — OWASP Security Hardening
+## Версия 4.0 — GPU / Dedicated Inference
 
 Добавено:
 
-- `owasp_hardening.py`;
-- `docs/SECURITY_HARDENING_BG.md`;
-- `OWASPHardeningMiddleware` в `auth_launch.py`;
-- `/security/owasp/status`;
-- `/api/security/owasp/status`;
-- tests в `tests/test_owasp_hardening.py`;
-- CI compile check за `owasp_hardening.py`.
+- `hardware_inference.py`;
+- `docs/GPU_DEDICATED_INFERENCE_BG.md`;
+- runtime auto избор `cpu` / `cuda`;
+- safe fallback от GPU към CPU;
+- dedicated transcription endpoint offload;
+- `/inference/status`;
+- `/api/inference/status`;
+- `/api/inference/recommendation`;
+- tests в `tests/test_hardware_inference.py`;
+- CI compile check за `hardware_inference.py`.
 
-Runtime защити:
-
-```text
-блокира TRACE / TRACK / CONNECT
-блокира path traversal, null byte, /etc/passwd, /proc/self, <script>, javascript:
-лимитира path/query дължина
-опционален host allowlist
-изисква JSON-compatible Content-Type за API write requests
-добавя CSP, HSTS, no-sniff, Referrer-Policy, Permissions-Policy, COOP, X-DNS-Prefetch-Control
-no-store cache policy за admin/auth/moderation/db sensitive endpoints
-```
-
-OWASP mapping:
-
-```text
-API1 BOLA → private checks/exports require admin/owner
-API2 Auth → role-aware keys and Bearer token support
-API3 BOPLA → shaped export bundles and protected private objects
-API4 Resource Consumption → rate limits, size guards, job caps, path/query caps
-API5 BFLA → admin/moderator function-level authorization
-API6 Business Flows → jobs/moderation/abuse actions are limited and audited
-API7 SSRF → suspicious URI payload block + search source whitelist
-API8 Misconfiguration → security headers and method/content-type hardening
-API9 Inventory → documented route inventory and status endpoints
-API10 Unsafe API Consumption → evidence scoring and fallback behavior
-```
-
-Variables:
+Препоръчителни variables:
 
 ```bash
-OWASP_HARDENING_ENABLED=1
-OWASP_BLOCK_SUSPICIOUS_INPUTS=1
-OWASP_REQUIRE_JSON_API_POSTS=1
-OWASP_CSP_ENABLED=1
-OWASP_HSTS_ENABLED=1
-OWASP_HSTS_MAX_AGE=31536000
-OWASP_MAX_QUERY_LENGTH=4096
-OWASP_MAX_PATH_LENGTH=2048
-OWASP_ALLOWED_HOSTS=claimradar.dyrakarmy.eu,dyrakarmy-claimradar-bg.hf.space
+INFERENCE_MODE=auto
+INFERENCE_AUTO_GPU=1
+WHISPER_DEVICE=auto
+WHISPER_MODEL_SIZE=base
+WHISPER_CPU_COMPUTE_TYPE=int8
+WHISPER_GPU_COMPUTE_TYPE=float16
+WHISPER_GPU_FALLBACK_CPU=1
+```
+
+Dedicated endpoint:
+
+```bash
+INFERENCE_MODE=dedicated
+DEDICATED_INFERENCE_ENABLED=1
+DEDICATED_TRANSCRIBE_URL=https://YOUR-ENDPOINT/transcribe
+DEDICATED_INFERENCE_TOKEN=...
+DEDICATED_TRANSCRIBE_TIMEOUT=180
+DEDICATED_FALLBACK_LOCAL=1
 ```
 
 Проверка:
 
 ```bash
-curl https://claimradar.dyrakarmy.eu/api/security/owasp/status
-curl -I https://claimradar.dyrakarmy.eu/product
+curl https://claimradar.dyrakarmy.eu/api/inference/status
+curl https://claimradar.dyrakarmy.eu/api/inference/recommendation
 ```
+
+## Версия 3.9 — OWASP Security Hardening
+
+- `owasp_hardening.py`;
+- `docs/SECURITY_HARDENING_BG.md`;
+- `/security/owasp/status`;
+- `/api/security/owasp/status`.
 
 ## Версия 3.8 — Moderation Actions
 
-Добавено:
-
 - `moderation_actions.py`;
 - `moderation_console.py`;
-- `/admin/moderation` — protected moderation console;
-- `/api/admin/moderation` — moderation JSON bundle;
-- `POST /api/moderation/check/<check_id>/hide`;
-- `POST /api/moderation/check/<check_id>/restore`;
-- `POST /api/moderation/check/<check_id>/note`;
-- `GET /api/moderation/check/<check_id>/notes`;
-- `GET /api/moderation/check/<check_id>/status`;
-- `POST /api/moderation/abuse/<report_id>/review`;
-- `GET /api/moderation/abuse/<report_id>/status`;
-- `GET /api/moderation/actions`.
+- `/admin/moderation`;
+- `/api/admin/moderation`;
+- hide/restore checks;
+- moderator notes;
+- abuse report review.
 
 ## Версия 3.7 — Evidence Quality Scoring + Exports
 
@@ -183,6 +171,10 @@ RATE_LIMIT_HASH_SALT=random-long-string
 PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
 CUSTOM_DOMAIN=claimradar.dyrakarmy.eu
 EXPORT_MAX_ITEMS=40
+INFERENCE_MODE=auto
+WHISPER_DEVICE=auto
+WHISPER_CPU_COMPUTE_TYPE=int8
+WHISPER_GPU_COMPUTE_TYPE=float16
 ```
 
 ## Дисклеймър
