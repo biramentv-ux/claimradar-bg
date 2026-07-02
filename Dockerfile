@@ -15,7 +15,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DB_SSLMODE=require \
     AUTH_ENABLED=1 \
     JOB_EXECUTION_MODE=thread \
-    QUEUE_WORKER_AUTOSTART=0
+    QUEUE_WORKER_AUTOSTART=0 \
+    CELERY_ENABLED=1 \
+    CELERY_WORKER_AUTOSTART=0 \
+    CELERY_QUEUE_NAME=claimradar \
+    CELERY_WORKER_CONCURRENCY=1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg curl fonts-dejavu-core \
