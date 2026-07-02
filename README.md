@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, external queue worker, GPU/dedicated inference option, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, production observability, external queue worker, GPU/dedicated inference option, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници и endpoints
 
@@ -26,6 +26,13 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/admin/abuse-reports
 /api/admin/recent-checks
 /api/admin/logs
+/observability
+/observability/status
+/api/observability/summary
+/api/observability/providers
+/api/observability/costs
+/api/observability/ai-usage
+/metrics
 /queue/status
 /api/queue/status
 /inference/status
@@ -87,9 +94,61 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
-## Версия 4.1 — External Queue Worker
+## Версия 4.2 — Production Observability
 
 Добавено:
+
+- `production_observability.py`;
+- `docs/PRODUCTION_OBSERVABILITY_BG.md`;
+- `/observability` dashboard;
+- `/observability/status` SLO status;
+- `/api/observability/summary`;
+- `/api/observability/providers`;
+- `/api/observability/costs`;
+- admin-protected `POST /api/observability/ai-usage`;
+- Prometheus-compatible `/metrics`;
+- token/cost JSONL tracking в `data/ai_usage_costs.jsonl`;
+- provider health summary за search и AI providers;
+- tests в `tests/test_production_observability.py`;
+- CI compile check за `production_observability.py`.
+
+Следи:
+
+```text
+uptime
+latency avg / p50 / p95 / p99
+error rate
+recent errors
+requests/status codes
+jobs stats
+queue status
+DB status
+search provider health
+AI provider health
+token usage
+estimated AI cost
+recent system events
+```
+
+Variables:
+
+```bash
+OBSERVABILITY_ENABLED=1
+OBSERVABILITY_PROMETHEUS_ENABLED=1
+OBSERVABILITY_LATENCY_SLO_MS=2500
+OBSERVABILITY_ERROR_RATE_SLO=0.05
+OPENAI_INPUT_COST_PER_1M=...
+OPENAI_OUTPUT_COST_PER_1M=...
+```
+
+Проверка:
+
+```bash
+curl https://claimradar.dyrakarmy.eu/api/observability/summary
+curl https://claimradar.dyrakarmy.eu/metrics
+```
+
+## Версия 4.1 — External Queue Worker
 
 - `external_queue.py`;
 - `queue_worker.py`;
@@ -97,33 +156,7 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - `docs/EXTERNAL_QUEUE_WORKER_BG.md`;
 - `/queue/status`;
 - `/api/queue/status`;
-- durable JSONL queue files:
-  - `data/jobs.jsonl`;
-  - `data/job_payloads.jsonl`;
-  - `data/queue_worker_heartbeats.jsonl`;
-- `QueueBackedJobStore`;
-- `QueueWorker`;
-- `JOB_EXECUTION_MODE=external` mode;
-- optional worker autostart in Docker/Hugging Face;
-- tests в `tests/test_external_queue.py`;
-- CI compile check за `external_queue.py`, `queue_worker.py` и shell syntax check за startup script.
-
-External worker variables:
-
-```bash
-JOB_EXECUTION_MODE=external
-QUEUE_WORKER_AUTOSTART=1
-QUEUE_POLL_SECONDS=2.0
-QUEUE_BATCH_SIZE=1
-QUEUE_STALE_RUNNING_SECONDS=1800
-```
-
-Проверка:
-
-```bash
-curl https://claimradar.dyrakarmy.eu/api/queue/status
-curl https://claimradar.dyrakarmy.eu/api/jobs/stats
-```
+- `JOB_EXECUTION_MODE=external` mode.
 
 ## Версия 4.0 — GPU / Dedicated Inference
 
@@ -143,24 +176,6 @@ curl https://claimradar.dyrakarmy.eu/api/jobs/stats
 - `/security/owasp/status`;
 - `/api/security/owasp/status`.
 
-## Версия 3.8 — Moderation Actions
-
-- `moderation_actions.py`;
-- `moderation_console.py`;
-- `/admin/moderation`;
-- `/api/admin/moderation`;
-- hide/restore checks;
-- moderator notes;
-- abuse report review.
-
-## Версия 3.7 — Evidence Quality Scoring + Exports
-
-- `evidence_export.py`;
-- evidence quality scoring;
-- `/api/export/check/<check_id>`;
-- `/export/check/<check_id>.md`;
-- `/export/check/<check_id>.pdf`.
-
 ## Основни variables
 
 ```bash
@@ -177,6 +192,7 @@ RATE_LIMIT_HASH_SALT=random-long-string
 PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
 CUSTOM_DOMAIN=claimradar.dyrakarmy.eu
 EXPORT_MAX_ITEMS=40
+OBSERVABILITY_ENABLED=1
 JOB_EXECUTION_MODE=external
 QUEUE_WORKER_AUTOSTART=1
 INFERENCE_MODE=auto
