@@ -42,6 +42,7 @@ def test_required_project_files_exist():
         "scripts/load_test.py",
         "scripts/check_custom_domain.py",
         "scripts/start_production.sh",
+        "scripts/generate_extension_store_assets.py",
         "docs/LOAD_TESTING_BG.md",
         "docs/CUSTOM_DOMAIN_BG.md",
         "docs/SECURITY_HARDENING_BG.md",
@@ -162,9 +163,11 @@ def test_extension_manifest_is_valid_mv3():
     manifest = json.loads(read("extension/manifest.json"))
     assert manifest["manifest_version"] == 3
     assert manifest["name"] == "ClaimRadar BG Overlay"
-    assert manifest["version"] == "2.3.0"
+    assert manifest["version"] == "2.4.0"
     assert "service_worker" in manifest["background"]
     assert manifest["action"]["default_popup"] == "popup.html"
+    assert "scripting" in manifest["permissions"]
+    assert "<all_urls>" not in json.dumps(manifest)
     for size in ["16", "32", "48", "128"]:
         icon_path = manifest["icons"][size]
         assert icon_path == f"icons/icon{size}.png"
@@ -182,6 +185,7 @@ def test_extension_required_files_exist():
         "offscreen.js",
         "PRIVACY_POLICY.md",
         "STORE_LISTING_BG.md",
+        "STORE_PRIVACY_DECLARATION_BG.md",
     ]
     missing = [path for path in required if not (ROOT / "extension" / path).exists()]
     assert not missing, f"Missing extension files: {missing}"
