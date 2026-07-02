@@ -95,7 +95,7 @@ curl https://claimradar.dyrakarmy.eu/api/jobs?status=queued
 - HTTP процесът не блокира при тежък AI/transcription job;
 - worker-ът може да се рестартира отделно;
 - може да се добавят повече workers по-късно;
-- queue state е durable през JSONL fallback и DB mirror слоя;
+- queue state е durable през JSONL файловете на Space-а;
 - retry/cancel/status API остава същото.
 
 ## Следваща стъпка
