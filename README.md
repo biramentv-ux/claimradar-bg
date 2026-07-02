@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници и endpoints
 
@@ -19,11 +19,21 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /
 /product
 /admin
+/admin/moderation
+/api/admin/moderation
 /api/admin/status
 /api/admin/system
 /api/admin/abuse-reports
 /api/admin/recent-checks
 /api/admin/logs
+/api/moderation/actions
+/api/moderation/check/<check_id>/hide
+/api/moderation/check/<check_id>/restore
+/api/moderation/check/<check_id>/note
+/api/moderation/check/<check_id>/notes
+/api/moderation/check/<check_id>/status
+/api/moderation/abuse/<report_id>/review
+/api/moderation/abuse/<report_id>/status
 /api/export/check/<check_id>
 /export/check/<check_id>.md
 /export/check/<check_id>.pdf
@@ -70,6 +80,53 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
+## Версия 3.8 — Moderation Actions
+
+Добавено:
+
+- `moderation_actions.py`;
+- `moderation_console.py`;
+- `/admin/moderation` — protected moderation console;
+- `/api/admin/moderation` — moderation JSON bundle;
+- `POST /api/moderation/check/<check_id>/hide`;
+- `POST /api/moderation/check/<check_id>/restore`;
+- `POST /api/moderation/check/<check_id>/note`;
+- `GET /api/moderation/check/<check_id>/notes`;
+- `GET /api/moderation/check/<check_id>/status`;
+- `POST /api/moderation/abuse/<report_id>/review`;
+- `GET /api/moderation/abuse/<report_id>/status`;
+- `GET /api/moderation/actions`;
+- JSONL audit trail в `data/moderation_actions.jsonl`;
+- moderator notes в `data/moderator_notes.jsonl`;
+- report status events в `data/abuse_status.jsonl`;
+- tests за hide/restore, notes, report review, moderator key и console access.
+
+Moderation workflow:
+
+```text
+reported → under_review → reviewed / dismissed / action_taken
+public check → hide/private → restore/public
+check → moderator notes → export PDF/Markdown
+```
+
+Достъп:
+
+```text
+/admin/moderation?admin_key=YOUR_ADMIN_KEY
+```
+
+Примери:
+
+```bash
+curl -X POST https://claimradar.dyrakarmy.eu/api/moderation/check/<check_id>/hide \
+  -H "Content-Type: application/json" \
+  -d '{"admin_key":"YOUR_ADMIN_KEY","reason":"privacy review"}'
+
+curl -X POST https://claimradar.dyrakarmy.eu/api/moderation/abuse/<report_id>/review \
+  -H "Content-Type: application/json" \
+  -d '{"admin_key":"YOUR_ADMIN_KEY","status":"reviewed","note":"checked"}'
+```
+
 ## Версия 3.7 — Evidence Quality Scoring + Exports
 
 Добавено:
@@ -81,37 +138,12 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - PDF export: `/export/check/<check_id>.pdf`;
 - privacy protection за private checks — export изисква admin/owner ключ;
 - `reportlab==4.2.5` за PDF export;
-- `fonts-dejavu-core` в Dockerfile за кирилица в PDF;
-- tests за scoring, JSON export, Markdown export, PDF export и private export protection.
-
-Evidence scoring взема предвид:
-
-```text
-официален/първичен домейн
-fact-check или публичен източник
-automatic vs manual search result
-текстово съвпадение с claim
-числово/годишно съвпадение
-дали evidence е цитирано във verdict
-```
-
-Пример:
-
-```bash
-curl https://claimradar.dyrakarmy.eu/api/export/check/<check_id>
-```
-
-```bash
-curl -L https://claimradar.dyrakarmy.eu/export/check/<check_id>.md -o claimradar-report.md
-curl -L https://claimradar.dyrakarmy.eu/export/check/<check_id>.pdf -o claimradar-report.pdf
-```
+- `fonts-dejavu-core` в Dockerfile за кирилица в PDF.
 
 ## Версия 3.6 — Admin Dashboard
 
-Добавено:
-
 - `admin_dashboard.py`;
-- `/admin` — protected HTML dashboard;
+- `/admin`;
 - `/api/admin/status`;
 - `/api/admin/system`;
 - `/api/admin/abuse-reports`;
@@ -120,63 +152,33 @@ curl -L https://claimradar.dyrakarmy.eu/export/check/<check_id>.pdf -o claimrada
 
 ## Версия 3.5 — Custom Domain Support
 
-Препоръчителен домейн:
-
 ```text
-claimradar.dyrakarmy.eu
-```
-
-DNS запис в SuperHosting:
-
-```text
-Type:  CNAME
-Host:  claimradar
-Name:  claimradar.dyrakarmy.eu
-Value: hf.space
-TTL:   3600
-```
-
-Hugging Face Variables:
-
-```bash
-PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
-CUSTOM_DOMAIN=claimradar.dyrakarmy.eu
-ROOT_DOMAIN=dyrakarmy.eu
-HF_SPACE_URL=https://dyrakarmy-claimradar-bg.hf.space
+claimradar.dyrakarmy.eu CNAME hf.space
 ```
 
 ## Версия 3.4 — Real Load Testing
 
 - `scripts/load_test.py`;
 - `.github/workflows/load-test.yml`;
-- `docs/LOAD_TESTING_BG.md`;
-- artifact `claimradar-bg-load-test-report`.
+- `docs/LOAD_TESTING_BG.md`.
 
 ## Версия 3.3 — Auth и Admin Roles
 
-- `auth_roles.py`;
-- `auth_launch.py`;
-- Dockerfile стартира `auth_launch.py`;
 - роли: `anonymous`, `viewer`, `moderator`, `admin`, `owner`;
 - `/auth/status`, `/api/auth/whoami`, `/api/auth/roles`, `/api/auth/check`.
 
 ## Версия 3.2 — Advanced Rate Limiting
 
 - per-scope rate limits;
-- hashed client identity;
-- rate-limit response headers;
 - temporary ban;
 - admin bypass;
-- `/rate-limit/status`;
-- `/api/rate-limit/status`;
-- admin-protected `POST /api/rate-limit/reset`.
+- `/rate-limit/status`, `/api/rate-limit/status`, `/api/rate-limit/reset`.
 
 ## Версия 3.1 — Enhanced Background Jobs
 
-- `jobs_api.py`;
 - `/jobs` dashboard;
 - `/api/jobs`, `/api/jobs/stats`, `/api/jobs/<job_id>`;
-- `POST /api/jobs/check`, `POST /api/jobs/ai-verdict`, `POST /api/jobs/real-check`;
+- check / ai-verdict / real-check jobs;
 - cancel/retry/cleanup.
 
 ## Версия 3.0 — Automated Tests
@@ -187,106 +189,22 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-## Версия 2.9 — Monitoring и Logging
-
-- `monitoring.py`;
-- `X-Request-ID` response header;
-- latency/status metrics;
-- JSONL event log;
-- `/monitoring/status`, `/monitoring/metrics`, `/monitoring/logs`.
-
-## Версия 2.8 — Legal и Methodology Pages
-
-- `/about`;
-- `/methodology`;
-- `/privacy`;
-- `/terms`;
-- `/sources`;
-- `/contact`;
-- `/legal-methodology.md`.
-
-## Версия 2.7 — Supabase/PostgreSQL Persistent Storage
-
-- `supabase/schema.sql`;
-- `db_storage.py`;
-- `persistent_launch.py`;
-- `psycopg[binary]`;
-- JSONL fallback при липсваща база.
-
-## Database variables
-
-```bash
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/postgres?sslmode=require
-SUPABASE_DB_URL=...
-POSTGRES_URL=...
-DB_ENABLED=1
-DB_SSLMODE=require
-```
-
-## Security / Jobs / Monitoring Variables
-
-```bash
-SECURITY_HEADERS_ENABLED=1
-MAX_REQUEST_BYTES=26214400
-RATE_LIMIT_ENABLED=1
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_PUBLIC=180
-RATE_LIMIT_API=60
-RATE_LIMIT_JOBS=20
-RATE_LIMIT_WS=20
-RATE_LIMIT_SEARCH=45
-RATE_LIMIT_ADMIN=30
-RATE_LIMIT_ABUSE=6
-RATE_LIMIT_STATUS=60
-RATE_LIMIT_BAN_THRESHOLD=8
-RATE_LIMIT_BAN_SECONDS=300
-RATE_LIMIT_ADMIN_BYPASS=1
-RATE_LIMIT_HASH_SALT=random-long-string
-JOB_WORKERS=2
-JOB_MAX_TEXT_CHARS=12000
-JOB_RETENTION=500
-JOB_RESULT_MAX_CHARS=50000
-EXPORT_MAX_ITEMS=40
-MONITORING_ENABLED=1
-REQUEST_LOG_ENABLED=1
-REQUEST_LOG_BODY=0
-MONITORING_RECENT_LIMIT=200
-MONITORING_SLOW_MS=2500
-MONITORING_LOG_FILE=data/system_events.jsonl
-```
-
-## Search API настройки
-
-```bash
-SEARCH_PROVIDER=auto
-SEARCH_STRICT_WHITELIST=1
-BRAVE_SEARCH_API_KEY=...
-BING_SEARCH_API_KEY=...
-TAVILY_API_KEY=...
-SERPAPI_API_KEY=...
-GOOGLE_SEARCH_API_KEY=...
-GOOGLE_CSE_ID=...
-```
-
-## AI настройки
+## Основни variables
 
 ```bash
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-4o-mini
-```
-
-## Hugging Face базови Variables
-
-```bash
-WHISPER_MODEL_SIZE=base
-WHISPER_DEVICE=cpu
-WHISPER_COMPUTE_TYPE=int8
-MAX_MEDIA_MB=80
-REALTIME_INTERVAL=2.5
-ROLLING_WINDOW_MB=12
-STREAM_MAX_BUFFER_MB=60
-STREAM_LANGUAGE=bg
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/postgres?sslmode=require
+DB_ENABLED=1
+ADMIN_KEY=...
+OWNER_KEY=...
+MODERATOR_KEY=...
+VIEWER_KEY=...
+AUTH_TOKEN_SALT=random-long-string
+RATE_LIMIT_HASH_SALT=random-long-string
 PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
+CUSTOM_DOMAIN=claimradar.dyrakarmy.eu
+EXPORT_MAX_ITEMS=40
 ```
 
 ## Дисклеймър
