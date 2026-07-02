@@ -22,13 +22,14 @@ from moderation_actions import register_moderation_routes
 from moderation_console import register_moderation_console_routes
 from monitoring import MonitoringMiddleware
 from owasp_hardening import OWASPHardeningMiddleware, register_owasp_routes
+from production_observability import register_observability_routes
 from rate_limit_api import register_rate_limit_routes
 from security_jobs import SecurityAndRateLimitMiddleware
 
 base_launch.job_store = maybe_external_job_store(base_launch.job_store, app_module.DATA_DIR)
 persistent.can_admin = is_admin_key
 
-app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.1-external-queue-worker")
+app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.2-production-observability")
 app.add_middleware(SecurityAndRateLimitMiddleware)
 app.add_middleware(MonitoringMiddleware)
 app.add_middleware(OWASPHardeningMiddleware)
@@ -61,6 +62,7 @@ register_custom_domain_routes(app)
 register_auth_routes(app, can_admin)
 register_inference_routes(app, app_module)
 register_external_queue_routes(app, base_launch.job_store)
+register_observability_routes(app, can_admin, base_launch.job_store, storage, persistent._original_read_jsonl)
 register_owasp_routes(app)
 register_rate_limit_routes(app, can_admin)
 register_job_routes(
