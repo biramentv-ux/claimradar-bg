@@ -36,10 +36,5 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-if [ "$JOB_EXECUTION_MODE" = "celery" ]; then
-  echo "Starting ClaimRadar BG Celery-enabled web app on port $APP_PORT..."
-  python auth_launch_celery.py
-else
-  echo "Starting ClaimRadar BG web app on port $APP_PORT..."
-  python auth_launch.py
-fi
+echo "Starting ClaimRadar BG runtime-safe web app on port $APP_PORT..."
+python runtime_safe_launch.py
