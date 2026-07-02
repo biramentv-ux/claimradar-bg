@@ -15,6 +15,7 @@ def test_required_project_files_exist():
         "persistent_launch.py",
         "auth_launch.py",
         "auth_roles.py",
+        "admin_dashboard.py",
         "custom_domain.py",
         "db_storage.py",
         "security_jobs.py",
@@ -56,6 +57,12 @@ def test_readme_documents_current_public_endpoints():
     readme = read("README.md")
     for endpoint in [
         "/product",
+        "/admin",
+        "/api/admin/status",
+        "/api/admin/system",
+        "/api/admin/abuse-reports",
+        "/api/admin/recent-checks",
+        "/api/admin/logs",
         "/about",
         "/methodology",
         "/privacy",
