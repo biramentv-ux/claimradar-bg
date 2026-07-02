@@ -13,9 +13,9 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="kicker">Extension polish · v2.2</div>
+    <div class="kicker">Store-ready · v2.4</div>
     <h1>ClaimRadar BG</h1>
-    <p>Overlay за YouTube/live дебати, captions/audio режим, mini mode, copy/report/send към app и local history.</p>
+    <p>Проверка на избран текст, YouTube captions и user-started tab audio. Overlay се inject-ва само след действие или в YouTube.</p>
 
     <div class="grid">
       <button class="btn primary" id="openApp">App</button>
@@ -41,13 +41,13 @@
     <input id="chunkMs" type="number" min="600" max="8000" step="100" />
 
     <button class="btn primary" id="saveBackend">Запази настройки</button>
-    <button class="btn" id="sendConfig">Приложи към текущия tab</button>
+    <button class="btn" id="sendConfig">Inject overlay в текущия tab</button>
     <button class="btn danger" id="clearHistory">Изчисти local history</button>
 
     <div class="status" id="status"></div>
 
     <div class="history" id="history"></div>
-    <p class="note">След промяна на extension файловете отвори chrome://extensions → Reload на ClaimRadar BG Overlay.</p>
+    <p class="note">Privacy: настройките и history стоят локално. Tab audio се стартира само от потребителя.</p>
   </div>
   <script src="popup.js"></script>
 </body>
