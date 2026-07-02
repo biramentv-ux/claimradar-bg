@@ -24,6 +24,7 @@ def test_required_project_files_exist():
         "external_queue.py",
         "queue_worker.py",
         "production_observability.py",
+        "telemetry_integrations.py",
         "custom_domain.py",
         "db_storage.py",
         "security_jobs.py",
@@ -47,6 +48,7 @@ def test_required_project_files_exist():
         "docs/GPU_DEDICATED_INFERENCE_BG.md",
         "docs/EXTERNAL_QUEUE_WORKER_BG.md",
         "docs/PRODUCTION_OBSERVABILITY_BG.md",
+        "docs/TELEMETRY_SENTRY_CODEQL_BG.md",
     ]
     missing = [path for path in required if not (ROOT / path).exists()]
     assert not missing, f"Missing required files: {missing}"
@@ -78,6 +80,9 @@ def test_readme_documents_current_public_endpoints():
         "/api/admin/abuse-reports",
         "/api/admin/recent-checks",
         "/api/admin/logs",
+        "/telemetry/status",
+        "/api/telemetry/status",
+        "/api/telemetry/test-span",
         "/observability",
         "/observability/status",
         "/api/observability/summary",
@@ -136,9 +141,17 @@ def test_workflows_exist():
         ".github/workflows/tests.yml",
         ".github/workflows/load-test.yml",
         ".github/workflows/custom-domain-check.yml",
+        ".github/workflows/codeql.yml",
     ]
     missing = [path for path in workflows if not (ROOT / path).exists()]
     assert not missing, f"Missing workflows: {missing}"
+
+
+def test_codeql_workflow_uses_security_queries():
+    codeql = read(".github/workflows/codeql.yml")
+    assert "github/codeql-action/init@v3" in codeql
+    assert "security-extended" in codeql
+    assert "security-and-quality" in codeql
 
 
 def test_extension_manifest_is_valid_mv3():
