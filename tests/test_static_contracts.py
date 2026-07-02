@@ -28,6 +28,8 @@ def test_required_project_files_exist():
         "LEGAL_METHODOLOGY_BG.md",
         "supabase/schema.sql",
         "scripts/package_extension.py",
+        "scripts/load_test.py",
+        "docs/LOAD_TESTING_BG.md",
     ]
     missing = [path for path in required if not (ROOT / path).exists()]
     assert not missing, f"Missing required files: {missing}"
@@ -77,6 +79,17 @@ def test_readme_documents_current_public_endpoints():
         assert endpoint in readme
 
 
+def test_workflows_exist():
+    workflows = [
+        ".github/workflows/sync-to-hf.yml",
+        ".github/workflows/build-extension.yml",
+        ".github/workflows/tests.yml",
+        ".github/workflows/load-test.yml",
+    ]
+    missing = [path for path in workflows if not (ROOT / path).exists()]
+    assert not missing, f"Missing workflows: {missing}"
+
+
 def test_extension_manifest_is_valid_mv3():
     manifest = json.loads(read("extension/manifest.json"))
     assert manifest["manifest_version"] == 3
@@ -104,13 +117,3 @@ def test_extension_required_files_exist():
     ]
     missing = [path for path in required if not (ROOT / "extension" / path).exists()]
     assert not missing, f"Missing extension files: {missing}"
-
-
-def test_workflows_exist():
-    workflows = [
-        ".github/workflows/sync-to-hf.yml",
-        ".github/workflows/build-extension.yml",
-        ".github/workflows/tests.yml",
-    ]
-    missing = [path for path in workflows if not (ROOT / path).exists()]
-    assert not missing, f"Missing workflows: {missing}"
