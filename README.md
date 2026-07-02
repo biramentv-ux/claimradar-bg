@@ -11,13 +11,19 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
 ```text
 /
 /product
+/admin
+/api/admin/status
+/api/admin/system
+/api/admin/abuse-reports
+/api/admin/recent-checks
+/api/admin/logs
 /jobs
 /custom-domain
 /domain
@@ -59,6 +65,50 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/jobs/cleanup
 /check/<share_id>
 /api/check/<share_id>
+```
+
+## Версия 3.6 — Admin Dashboard
+
+Добавено:
+
+- `admin_dashboard.py`;
+- `/admin` — protected HTML dashboard;
+- `/api/admin/status` — общ admin status bundle;
+- `/api/admin/system` — system/db/security/rate-limit/monitoring/custom-domain summary;
+- `/api/admin/abuse-reports` — последни abuse reports;
+- `/api/admin/recent-checks` — последни проверки;
+- `/api/admin/logs` — admin logs facade;
+- интеграция в `auth_launch.py`;
+- smoke tests за 403 без ключ и 200 с admin/owner ключ;
+- static contract tests и CI compile update.
+
+Dashboard-ът показва:
+
+```text
+DB status
+storage mode: postgres/jsonl_fallback
+monitoring metrics
+jobs stats
+rate limit status
+custom domain config
+recent checks
+recent jobs
+abuse reports
+feedback
+quick links към важните системни страници
+```
+
+Достъп:
+
+```text
+/admin?admin_key=YOUR_ADMIN_KEY
+```
+
+или към JSON endpoint-ите:
+
+```bash
+curl https://claimradar.dyrakarmy.eu/api/admin/status \
+  -H "Authorization: Bearer YOUR_ADMIN_KEY"
 ```
 
 ## Версия 3.5 — Custom Domain Support
@@ -105,20 +155,6 @@ PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
 CUSTOM_DOMAIN=claimradar.dyrakarmy.eu
 ROOT_DOMAIN=dyrakarmy.eu
 HF_SPACE_URL=https://dyrakarmy-claimradar-bg.hf.space
-```
-
-Проверка:
-
-```bash
-python scripts/check_custom_domain.py \
-  --domain claimradar.dyrakarmy.eu \
-  --hf-url https://dyrakarmy-claimradar-bg.hf.space
-```
-
-GitHub Actions:
-
-```text
-Actions → Custom Domain Check → Run workflow
 ```
 
 ## Версия 3.4 — Real Load Testing
