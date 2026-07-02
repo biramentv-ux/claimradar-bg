@@ -1,70 +1,100 @@
-# ClaimRadar BG Overlay — Store Listing Draft
+# ClaimRadar BG Overlay — Chrome/Edge Store Listing
 
-## Short description
+## Store-ready short description
 
-Bulgarian claim detection overlay with YouTube captions, selection analysis and optional realtime tab-audio transcription.
+Bulgarian claim detection overlay for selected text, YouTube transcripts and optional user-started tab-audio transcription.
 
-## Full description
+## Store-ready full description
 
-ClaimRadar BG Overlay helps users identify potentially checkable claims in Bulgarian public content.
+ClaimRadar BG Overlay helps users identify potentially checkable claims in Bulgarian web content and send them to the ClaimRadar BG backend for deeper analysis.
 
-It can analyze selected text, visible page text, YouTube captions/transcripts and, when started by the user, active tab audio through a realtime backend.
+Use it to review selected text, visible page text, YouTube captions/transcripts and, only when started by the user, active tab audio for realtime transcription. The extension is built for Bulgarian public-interest content such as debates, interviews, news clips, policy statements and economic claims.
 
-Main features:
+### Main features
 
-- ClaimRadar overlay on web pages;
-- YouTube captions/transcript analysis;
-- selected text analysis;
-- optional realtime tab-audio transcription;
-- live word stream from backend;
+- Overlay on the active page after user action;
+- automatic YouTube captions/transcript mode on YouTube pages;
+- selected text / page text claim detection;
+- optional realtime active-tab audio transcription;
 - local claim cards with confidence score;
 - quick evidence search links;
 - copy claim / copy all;
 - send to ClaimRadar BG app;
 - report button;
-- local history;
+- local browser history;
 - floating mini mode.
+
+### What it does not do
+
+- It does not sell user data.
+- It does not collect passwords, payment data or private messages.
+- It does not capture microphone audio.
+- It does not run on every website by default after install; outside YouTube, the overlay is injected only after the user chooses to apply it to the current tab.
+- It is not a final legal, political or journalistic authority. Users should verify results through the evidence links and official sources.
 
 ## Category suggestion
 
-Productivity or News & Weather.
+Primary: Productivity  
+Alternative: News & Weather
 
-## Permissions explanation
+## Permissions explanation for reviewers
 
 ### activeTab
 
-Used to apply the overlay to the current page after the user opens or uses the extension.
+Used to let the user apply the ClaimRadar overlay to the current tab after opening the popup or choosing the current-tab action. This avoids broad default access to every website.
+
+### scripting
+
+Used only to inject `content.js` and `audio_controls.js` into the active tab after the user action. YouTube pages still receive the content script automatically because that is the extension's main supported video workflow.
 
 ### storage
 
-Used to store local settings and local analysis history.
+Used to store local settings and local analysis history in the browser.
 
 ### tabCapture
 
-Used only when the user starts realtime audio mode. Captures active tab audio, not microphone audio.
+Used only when the user starts realtime tab-audio mode. This captures active tab audio, not microphone audio.
 
 ### offscreen
 
-Used to run the MediaRecorder process for tab audio capture.
+Used to run the MediaRecorder process required for user-started active-tab audio capture.
 
 ### host permissions
 
-Used for YouTube caption/transcript analysis, backend communication, local development and Hugging Face-hosted ClaimRadar BG endpoints.
+Default host permissions are limited to YouTube and the production ClaimRadar BG backend. Localhost and wildcard Hugging Face domains are optional host permissions for development/custom backend use.
 
-## Review notes
+## Privacy disclosure copy
 
-This is a prototype tool. Results are not final legal, political or journalistic conclusions. Users should verify claims through the evidence links and official sources.
+ClaimRadar BG Overlay processes only the content required for the user-selected feature. Settings and recent local history are stored in browser extension storage. Selected text, visible captions/transcripts, report payloads or active-tab audio chunks may be sent to the configured ClaimRadar BG backend only when the user uses the relevant feature. Microphone audio is not captured. User data is not sold.
 
-## Required screenshots before submission
+## Reviewer test instructions
 
-Prepare screenshots for:
+1. Install the unpacked extension.
+2. Open a YouTube video with Bulgarian captions or transcript.
+3. Open the popup and keep `Captions / Transcript` selected.
+4. Click `Inject overlay в текущия tab` or wait for the YouTube content script.
+5. Press `Старт` in the overlay.
+6. Select text on any normal HTTPS page, open the popup and click `Inject overlay в текущия tab` to test selected-text mode.
+7. To test realtime audio, switch to `Audio realtime`, keep the default backend, apply to the current tab and press the realtime control in the overlay.
 
-1. Popup settings panel.
-2. Overlay active on a YouTube video.
-3. Claim cards with evidence links.
-4. Realtime audio mode.
-5. Product page at `/product`.
+## Store asset checklist
+
+Generated by `scripts/generate_extension_store_assets.py`:
+
+- `extension/store_assets/generated/chrome_screenshot_1_popup_640x400.png`
+- `extension/store_assets/generated/chrome_screenshot_2_youtube_overlay_640x400.png`
+- `extension/store_assets/generated/chrome_screenshot_3_claim_cards_640x400.png`
+- `extension/store_assets/generated/chrome_screenshot_4_audio_mode_640x400.png`
+- `extension/store_assets/generated/chrome_screenshot_5_product_page_640x400.png`
+- `extension/store_assets/generated/chrome_small_promo_440x280.png`
+- `extension/store_assets/generated/chrome_marquee_promo_1400x560.png`
 
 ## Privacy policy URL
 
-Use the public product/privacy page when available, or include the text from `extension/PRIVACY_POLICY.md` during review.
+Use:
+
+```text
+https://dyrakarmy-claimradar-bg.hf.space/privacy
+```
+
+Fallback for reviewer package: `extension/PRIVACY_POLICY.md`.
