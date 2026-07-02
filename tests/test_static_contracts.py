@@ -19,6 +19,7 @@ def test_required_project_files_exist():
         "evidence_export.py",
         "moderation_actions.py",
         "moderation_console.py",
+        "owasp_hardening.py",
         "custom_domain.py",
         "db_storage.py",
         "security_jobs.py",
@@ -37,6 +38,7 @@ def test_required_project_files_exist():
         "scripts/check_custom_domain.py",
         "docs/LOAD_TESTING_BG.md",
         "docs/CUSTOM_DOMAIN_BG.md",
+        "docs/SECURITY_HARDENING_BG.md",
     ]
     missing = [path for path in required if not (ROOT / path).exists()]
     assert not missing, f"Missing required files: {missing}"
@@ -68,6 +70,8 @@ def test_readme_documents_current_public_endpoints():
         "/api/admin/abuse-reports",
         "/api/admin/recent-checks",
         "/api/admin/logs",
+        "/security/owasp/status",
+        "/api/security/owasp/status",
         "/api/moderation/actions",
         "/api/moderation/check/<check_id>/hide",
         "/api/moderation/check/<check_id>/restore",
