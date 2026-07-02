@@ -140,7 +140,10 @@ def enrich_item_with_evidence_quality(item: Dict[str, Any]) -> Dict[str, Any]:
     citations = {int(c) for c in item.get("citations", []) if str(c).isdigit()}
     evidence = list(item.get("evidence") or [])
     if not evidence and item.get("sources"):
-        evidence = [dict(src, title=src.get("name", "източник"), snippet="Препоръчан source link", source=src.get("name", "source"), manual=True) for src in item.get("sources", [])]
+        evidence = [
+            dict(src, title=src.get("name", "източник"), snippet="Препоръчан source link", source=src.get("name", "source"), manual=True)
+            for src in item.get("sources", [])
+        ]
     enriched_evidence = []
     scores = []
     for idx, ev in enumerate(evidence, 1):
@@ -233,7 +236,9 @@ def check_to_markdown(bundle: Dict[str, Any]) -> str:
             lines.append("| - | - | 0 | Няма evidence | - |")
         for ev_idx, ev in enumerate(evidence, 1):
             quality = ev.get("quality", {})
-            lines.append(f"| {ev_idx} | {markdown_escape(ev.get('source') or ev.get('name'))} | {quality.get('score', 0)} | {markdown_escape(ev.get('title'))} | {markdown_escape(ev.get('url'))} |")
+            lines.append(
+                f"| {ev_idx} | {markdown_escape(ev.get('source') or ev.get('name'))} | {quality.get('score', 0)} | {markdown_escape(ev.get('title'))} | {markdown_escape(ev.get('url'))} |"
+            )
         lines += ["", markdown_escape(item.get("short_reason") or item.get("explanation") or item.get("reason") or ""), ""]
     return "\n".join(lines).strip() + "\n"
 
@@ -251,8 +256,24 @@ def _register_pdf_font() -> str:
     return "Helvetica"
 
 
+def _pdf_table_from_cells(cells: List[str], styles: Any) -> Any:
+    normalized = (cells[:5] + [""] * 5)[:5]
+    widths = [1.0 * cm, 2.5 * cm, 1.4 * cm, 6.5 * cm, 5.0 * cm]
+    row = [Paragraph(cell or " ", styles["CRBody"]) for cell in normalized]
+    table = Table([row], colWidths=widths)
+    table.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    return table
+
+
 def markdown_to_pdf_bytes(markdown: str, title: str = "ClaimRadar BG report") -> bytes:
-    if SimpleDocTemplate is None:
+    if SimpleDocTemplate is None or cm is None or Paragraph is None or Table is None or TableStyle is None:
         return minimal_pdf_bytes(markdown)
     buf = io.BytesIO()
     font = _register_pdf_font()
@@ -275,7 +296,7 @@ def markdown_to_pdf_bytes(markdown: str, title: str = "ClaimRadar BG report") ->
             continue
         elif line.startswith("|"):
             cells = [html_escape(cell.strip()) for cell in line.strip("|").split("|")]
-            story.append(Table([[Paragraph(cell, styles["CRBody"]) for cell in cells]], colWidths=[1.0 * cm, 2.5 * cm, 1.4 * cm, 6.5 * cm, 5.0 * cm], style=TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.grey), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+            story.append(_pdf_table_from_cells(cells, styles))
         else:
             story.append(Paragraph(html_escape(line), styles["CRBody"]))
     doc.build(story)
@@ -289,7 +310,13 @@ def _pdf_escape_line(line: str) -> str:
 def minimal_pdf_bytes(text: str) -> bytes:
     safe_lines = [line.encode("latin-1", "replace").decode("latin-1")[:100] for line in text.splitlines()[:70]]
     stream = "BT /F1 10 Tf 50 800 Td 14 TL " + " ".join([f"({_pdf_escape_line(line)}) Tj T*" for line in safe_lines]) + " ET"
-    objects = ["1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj", "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj", "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj", "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj", f"5 0 obj << /Length {len(stream.encode('latin-1'))} >> stream\n{stream}\nendstream endobj"]
+    objects = [
+        "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
+        "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
+        "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj",
+        "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj",
+        f"5 0 obj << /Length {len(stream.encode('latin-1'))} >> stream\n{stream}\nendstream endobj",
+    ]
     pdf = "%PDF-1.4\n"
     offsets = [0]
     for obj in objects:
