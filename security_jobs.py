@@ -31,6 +31,8 @@ RATE_LIMIT_BAN_THRESHOLD = int(os.getenv("RATE_LIMIT_BAN_THRESHOLD", "8"))
 RATE_LIMIT_BAN_SECONDS = int(os.getenv("RATE_LIMIT_BAN_SECONDS", "300"))
 RATE_LIMIT_ADMIN_BYPASS = os.getenv("RATE_LIMIT_ADMIN_BYPASS", "1").lower() not in {"0", "false", "no"}
 RATE_LIMIT_EXEMPT_UI_GETS = os.getenv("RATE_LIMIT_EXEMPT_UI_GETS", "1").lower() not in {"0", "false", "no"}
+SECURITY_ALLOW_HUGGINGFACE_FRAME = os.getenv("SECURITY_ALLOW_HUGGINGFACE_FRAME", "1").lower() not in {"0", "false", "no"}
+SECURITY_FRAME_ANCESTORS = os.getenv("SECURITY_FRAME_ANCESTORS", "'self' https://huggingface.co https://*.huggingface.co")
 RATE_LIMIT_HASH_SALT = os.getenv("RATE_LIMIT_HASH_SALT", "claimradar-bg-rate-limit")
 JOB_WORKERS = int(os.getenv("JOB_WORKERS", "2"))
 JOB_RETENTION = int(os.getenv("JOB_RETENTION", "500"))
@@ -191,17 +193,7 @@ class InMemoryRateLimiter:
             if until > now:
                 retry_after = int(max(1, until - now))
                 self.rejected_total += 1
-                return {
-                    "allowed": False,
-                    "reason": "temporary_ban",
-                    "key": key,
-                    "scope": scope,
-                    "limit": limit,
-                    "remaining": 0,
-                    "retry_after": retry_after,
-                    "reset": retry_after,
-                    "banned_until": int(until),
-                }
+                return {"allowed": False, "reason": "temporary_ban", "key": key, "scope": scope, "limit": limit, "remaining": 0, "retry_after": retry_after, "reset": retry_after, "banned_until": int(until)}
             self.banned_until.pop(key, None)
             self.violations[key] = 0
 
@@ -218,42 +210,16 @@ class InMemoryRateLimiter:
                 self.banned_until[key] = now + RATE_LIMIT_BAN_SECONDS
                 retry_after = RATE_LIMIT_BAN_SECONDS
                 reason = "temporary_ban"
-            return {
-                "allowed": False,
-                "reason": reason,
-                "key": key,
-                "scope": scope,
-                "limit": limit,
-                "remaining": 0,
-                "retry_after": retry_after,
-                "reset": retry_after,
-                "violations": self.violations[key],
-                "banned_until": int(self.banned_until.get(key, 0) or 0),
-            }
+            return {"allowed": False, "reason": reason, "key": key, "scope": scope, "limit": limit, "remaining": 0, "retry_after": retry_after, "reset": retry_after, "violations": self.violations[key], "banned_until": int(self.banned_until.get(key, 0) or 0)}
 
         bucket.append(now)
         self.allowed_total += 1
         self.scope_counts[scope] += 1
         remaining = max(0, limit - len(bucket))
-        return {
-            "allowed": True,
-            "reason": "ok",
-            "key": key,
-            "scope": scope,
-            "limit": limit,
-            "remaining": remaining,
-            "retry_after": 0,
-            "reset": max(1, reset),
-            "violations": self.violations.get(key, 0),
-        }
+        return {"allowed": True, "reason": "ok", "key": key, "scope": scope, "limit": limit, "remaining": remaining, "retry_after": 0, "reset": max(1, reset), "violations": self.violations.get(key, 0)}
 
     def headers(self, decision: Dict[str, Any]) -> Dict[str, str]:
-        return {
-            "X-RateLimit-Limit": str(decision.get("limit", 0)),
-            "X-RateLimit-Remaining": str(decision.get("remaining", 0)),
-            "X-RateLimit-Reset": str(decision.get("reset", 0)),
-            "X-RateLimit-Scope": str(decision.get("scope", "default")),
-        }
+        return {"X-RateLimit-Limit": str(decision.get("limit", 0)), "X-RateLimit-Remaining": str(decision.get("remaining", 0)), "X-RateLimit-Reset": str(decision.get("reset", 0)), "X-RateLimit-Scope": str(decision.get("scope", "default"))}
 
     def reset(self, identity_hash: str = "", scope: str = "", all_keys: bool = False) -> Dict[str, Any]:
         if all_keys:
@@ -283,17 +249,7 @@ class InMemoryRateLimiter:
         return {
             "enabled": RATE_LIMIT_ENABLED,
             "window_seconds": RATE_LIMIT_WINDOW_SECONDS,
-            "limits": {
-                "default": RATE_LIMIT_DEFAULT,
-                "public": RATE_LIMIT_PUBLIC,
-                "api": RATE_LIMIT_API,
-                "jobs": RATE_LIMIT_JOBS,
-                "websocket": RATE_LIMIT_WS,
-                "search": RATE_LIMIT_SEARCH,
-                "admin": RATE_LIMIT_ADMIN,
-                "abuse": RATE_LIMIT_ABUSE,
-                "status": RATE_LIMIT_STATUS,
-            },
+            "limits": {"default": RATE_LIMIT_DEFAULT, "public": RATE_LIMIT_PUBLIC, "api": RATE_LIMIT_API, "jobs": RATE_LIMIT_JOBS, "websocket": RATE_LIMIT_WS, "search": RATE_LIMIT_SEARCH, "admin": RATE_LIMIT_ADMIN, "abuse": RATE_LIMIT_ABUSE, "status": RATE_LIMIT_STATUS},
             "ban_threshold": RATE_LIMIT_BAN_THRESHOLD,
             "ban_seconds": RATE_LIMIT_BAN_SECONDS,
             "admin_bypass": RATE_LIMIT_ADMIN_BYPASS,
@@ -314,13 +270,9 @@ rate_limiter = InMemoryRateLimiter()
 
 class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        path = request.url.path
         content_length = int(request.headers.get("content-length") or 0)
         if MAX_REQUEST_BYTES > 0 and content_length > MAX_REQUEST_BYTES:
-            return JSONResponse(
-                {"ok": False, "error": "request_too_large", "max_bytes": MAX_REQUEST_BYTES},
-                status_code=413,
-            )
+            return JSONResponse({"ok": False, "error": "request_too_large", "max_bytes": MAX_REQUEST_BYTES}, status_code=413)
 
         rate_decision: Dict[str, Any] | None = None
         admin_bypass = False
@@ -334,17 +286,7 @@ class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
                 if not rate_decision.get("allowed"):
                     headers = rate_limiter.headers(rate_decision)
                     headers["Retry-After"] = str(rate_decision.get("retry_after", 1))
-                    return JSONResponse(
-                        {
-                            "ok": False,
-                            "error": rate_decision.get("reason", "rate_limited"),
-                            "retry_after_seconds": rate_decision.get("retry_after", 1),
-                            "limit_per_window": rate_decision.get("limit", 0),
-                            "scope": rate_decision.get("scope", "default"),
-                        },
-                        status_code=429,
-                        headers=headers,
-                    )
+                    return JSONResponse({"ok": False, "error": rate_decision.get("reason", "rate_limited"), "retry_after_seconds": rate_decision.get("retry_after", 1), "limit_per_window": rate_decision.get("limit", 0), "scope": rate_decision.get("scope", "default")}, status_code=429, headers=headers)
 
         response = await call_next(request)
 
@@ -359,7 +301,10 @@ class SecurityAndRateLimitMiddleware(BaseHTTPMiddleware):
 
         if SECURITY_HEADERS_ENABLED:
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
-            response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+            if SECURITY_ALLOW_HUGGINGFACE_FRAME:
+                response.headers.setdefault("Content-Security-Policy", f"frame-ancestors {SECURITY_FRAME_ANCESTORS}")
+            else:
+                response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
             response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
             response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
             response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
@@ -395,33 +340,10 @@ class JobStore:
         with self.jobs_file.open("a", encoding="utf-8") as f:
             f.write(json.dumps(job, ensure_ascii=False, default=str) + "\n")
 
-    def create(
-        self,
-        job_type: str,
-        payload: Dict[str, Any],
-        fn: Callable[[Dict[str, Any]], Dict[str, Any]],
-        parent_id: str | None = None,
-    ) -> Dict[str, Any]:
+    def create(self, job_type: str, payload: Dict[str, Any], fn: Callable[[Dict[str, Any]], Dict[str, Any]], parent_id: str | None = None) -> Dict[str, Any]:
         job_id = uuid.uuid4().hex[:12]
         now = time.time()
-        job = {
-            "id": job_id,
-            "type": job_type,
-            "status": "queued",
-            "progress": 0,
-            "created_at": now,
-            "updated_at": now,
-            "started_at": None,
-            "finished_at": None,
-            "duration_seconds": None,
-            "parent_id": parent_id,
-            "attempt": self.next_attempt(parent_id),
-            "cancel_requested": False,
-            "payload_preview": self.preview_payload(payload),
-            "result": None,
-            "error": None,
-            "events": [{"ts": now, "status": "queued", "message": "Job queued"}],
-        }
+        job = {"id": job_id, "type": job_type, "status": "queued", "progress": 0, "created_at": now, "updated_at": now, "started_at": None, "finished_at": None, "duration_seconds": None, "parent_id": parent_id, "attempt": self.next_attempt(parent_id), "cancel_requested": False, "payload_preview": self.preview_payload(payload), "result": None, "error": None, "events": [{"ts": now, "status": "queued", "message": "Job queued"}]}
         self.jobs[job_id] = job
         self.payloads[job_id] = payload
         self.functions[job_id] = fn
@@ -507,20 +429,7 @@ class JobStore:
         status_counts = Counter(str(job.get("status", "unknown")) for job in self.jobs.values())
         type_counts = Counter(str(job.get("type", "unknown")) for job in self.jobs.values())
         durations = [float(job.get("duration_seconds") or 0) for job in self.jobs.values() if job.get("duration_seconds")]
-        return {
-            "total": len(self.jobs),
-            "status_counts": dict(status_counts),
-            "type_counts": dict(type_counts),
-            "running": status_counts.get("running", 0),
-            "queued": status_counts.get("queued", 0),
-            "failed": status_counts.get("failed", 0),
-            "cancelled": status_counts.get("cancelled", 0),
-            "done": status_counts.get("done", 0),
-            "workers": JOB_WORKERS,
-            "retention": JOB_RETENTION,
-            "avg_duration_seconds": round(sum(durations) / len(durations), 3) if durations else 0,
-            "max_duration_seconds": round(max(durations), 3) if durations else 0,
-        }
+        return {"total": len(self.jobs), "status_counts": dict(status_counts), "type_counts": dict(type_counts), "running": status_counts.get("running", 0), "queued": status_counts.get("queued", 0), "failed": status_counts.get("failed", 0), "cancelled": status_counts.get("cancelled", 0), "done": status_counts.get("done", 0), "workers": JOB_WORKERS, "retention": JOB_RETENTION, "avg_duration_seconds": round(sum(durations) / len(durations), 3) if durations else 0, "max_duration_seconds": round(max(durations), 3) if durations else 0}
 
     def cleanup(self, keep: int = JOB_RETENTION, terminal_only: bool = True) -> Dict[str, Any]:
         keep = max(10, min(int(keep), max(JOB_RETENTION, 10_000)))
@@ -560,7 +469,6 @@ class JobStore:
             if isinstance(value, list):
                 return [trim(item) for item in value]
             return value
-
         return trim(result or {})
 
 
@@ -568,6 +476,8 @@ def security_status() -> Dict[str, Any]:
     return {
         "rate_limit_enabled": RATE_LIMIT_ENABLED,
         "security_headers_enabled": SECURITY_HEADERS_ENABLED,
+        "security_allow_huggingface_frame": SECURITY_ALLOW_HUGGINGFACE_FRAME,
+        "security_frame_ancestors": SECURITY_FRAME_ANCESTORS,
         "max_request_bytes": MAX_REQUEST_BYTES,
         "rate_limit_window_seconds": RATE_LIMIT_WINDOW_SECONDS,
         "rate_limit_default": RATE_LIMIT_DEFAULT,
