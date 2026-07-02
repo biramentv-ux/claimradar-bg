@@ -8,6 +8,7 @@ import app as app_module
 import launch as base_launch
 import persistent_launch as persistent
 from auth_roles import is_admin_key, register_auth_routes
+from custom_domain import register_custom_domain_routes
 from db_storage import storage
 from jobs_api import register_job_routes
 from monitoring import MonitoringMiddleware
@@ -17,7 +18,7 @@ from security_jobs import SecurityAndRateLimitMiddleware
 # Upgrade admin validation for new outer routes to support role-based API keys.
 persistent.can_admin = is_admin_key
 
-app = FastAPI(title="ClaimRadar BG Auth Layer", version="3.3-auth-admin-roles")
+app = FastAPI(title="ClaimRadar BG Auth Layer", version="3.5-custom-domain-ready")
 app.add_middleware(SecurityAndRateLimitMiddleware)
 app.add_middleware(MonitoringMiddleware)
 
@@ -45,6 +46,7 @@ def migrate_jsonl_to_db() -> dict:
     return counts
 
 
+register_custom_domain_routes(app)
 register_auth_routes(app, can_admin)
 register_rate_limit_routes(app, can_admin)
 register_job_routes(
