@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници
 
@@ -54,6 +54,62 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/jobs/cleanup
 /check/<share_id>
 /api/check/<share_id>
+```
+
+## Версия 3.4 — Real Load Testing
+
+Добавено:
+
+- `scripts/load_test.py` — production-safe HTTP load test script без външни зависимости;
+- `.github/workflows/load-test.yml` — GitHub Actions workflow срещу реалния Hugging Face URL;
+- `docs/LOAD_TESTING_BG.md` — инструкции за стартиране и четене на резултатите;
+- `tests/test_load_test_script.py` — contract tests за load test script/workflow;
+- upload artifact `claimradar-bg-load-test-report`;
+- JSON и Markdown report:
+  - `load-test-report.json`;
+  - `load-test-report.md`.
+
+Default live target:
+
+```text
+https://dyrakarmy-claimradar-bg.hf.space
+```
+
+Default gentle profile:
+
+```text
+requests=70
+concurrency=5
+timeout=25s
+max_error_rate=0.20
+max_p95_ms=15000
+```
+
+Default endpoints:
+
+```text
+/health
+/product
+/auth/status
+/db/status
+/rate-limit/status
+/monitoring/status
+/api/jobs/stats
+```
+
+Ръчно стартиране:
+
+```bash
+python scripts/load_test.py \
+  --base-url https://dyrakarmy-claimradar-bg.hf.space \
+  --requests 70 \
+  --concurrency 5
+```
+
+GitHub Actions:
+
+```text
+Actions → Real Load Test → Run workflow
 ```
 
 ## Версия 3.3 — Auth и Admin Roles
