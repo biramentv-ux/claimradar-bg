@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "ClaimRadar BG Overlay",
   "short_name": "ClaimRadar BG",
-  "version": "2.3.0",
-  "description": "Bulgarian claim detection overlay with YouTube captions, selection analysis, local history and optional realtime tab-audio transcription.",
+  "version": "2.4.0",
+  "description": "Bulgarian claim detection overlay for selected text, YouTube transcripts and optional user-started tab-audio transcription.",
   "homepage_url": "https://dyrakarmy-claimradar-bg.hf.space/product",
   "icons": {
     "16": "icons/icon16.png",
@@ -11,13 +11,14 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["activeTab", "storage", "tabCapture", "offscreen"],
+  "permissions": ["activeTab", "storage", "scripting", "tabCapture", "offscreen"],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://*.youtube.com/*",
-    "https://duckduckgo.com/*",
+    "https://dyrakarmy-claimradar-bg.hf.space/*"
+  ],
+  "optional_host_permissions": [
     "https://*.hf.space/*",
-    "wss://*.hf.space/*",
     "http://127.0.0.1/*",
     "http://localhost/*"
   ],
@@ -36,7 +37,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://www.youtube.com/*", "https://*.youtube.com/*"],
       "js": ["content.js", "audio_controls.js"],
       "run_at": "document_idle"
     }
