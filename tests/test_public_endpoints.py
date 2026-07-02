@@ -87,6 +87,41 @@ def test_auth_roles_and_check_endpoint():
     assert allowed.json()["allowed"] is True
 
 
+def test_admin_dashboard_requires_admin_and_returns_status():
+    denied = client.get("/admin")
+    assert denied.status_code == 403
+    assert "Admin" in denied.text
+
+    page = client.get("/admin?admin_key=test-admin-key")
+    assert page.status_code == 200
+    assert "Admin Dashboard" in page.text
+    assert "Последни проверки" in page.text
+
+    status = client.get("/api/admin/status", headers={"authorization": "Bearer test-admin-key"})
+    assert status.status_code == 200
+    data = status.json()
+    assert data["ok"] is True
+    assert "admin" in data
+    assert "db" in data["admin"]
+    assert "jobs" in data["admin"]
+    assert "monitoring" in data["admin"]
+
+
+def test_admin_dashboard_sub_endpoints():
+    endpoints = [
+        "/api/admin/system",
+        "/api/admin/abuse-reports",
+        "/api/admin/recent-checks",
+        "/api/admin/logs",
+    ]
+    for endpoint in endpoints:
+        denied = client.get(endpoint)
+        assert denied.status_code == 403
+        allowed = client.get(endpoint, headers={"authorization": "Bearer test-admin-key"})
+        assert allowed.status_code == 200
+        assert allowed.json()["ok"] is True
+
+
 def test_monitoring_endpoints():
     status = client.get("/monitoring/status")
     assert status.status_code == 200
