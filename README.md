@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници и endpoints
 
@@ -26,6 +26,8 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/admin/abuse-reports
 /api/admin/recent-checks
 /api/admin/logs
+/security/owasp/status
+/api/security/owasp/status
 /api/moderation/actions
 /api/moderation/check/<check_id>/hide
 /api/moderation/check/<check_id>/restore
@@ -80,6 +82,66 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
+## Версия 3.9 — OWASP Security Hardening
+
+Добавено:
+
+- `owasp_hardening.py`;
+- `docs/SECURITY_HARDENING_BG.md`;
+- `OWASPHardeningMiddleware` в `auth_launch.py`;
+- `/security/owasp/status`;
+- `/api/security/owasp/status`;
+- tests в `tests/test_owasp_hardening.py`;
+- CI compile check за `owasp_hardening.py`.
+
+Runtime защити:
+
+```text
+блокира TRACE / TRACK / CONNECT
+блокира path traversal, null byte, /etc/passwd, /proc/self, <script>, javascript:
+лимитира path/query дължина
+опционален host allowlist
+изисква JSON-compatible Content-Type за API write requests
+добавя CSP, HSTS, no-sniff, Referrer-Policy, Permissions-Policy, COOP, X-DNS-Prefetch-Control
+no-store cache policy за admin/auth/moderation/db sensitive endpoints
+```
+
+OWASP mapping:
+
+```text
+API1 BOLA → private checks/exports require admin/owner
+API2 Auth → role-aware keys and Bearer token support
+API3 BOPLA → shaped export bundles and protected private objects
+API4 Resource Consumption → rate limits, size guards, job caps, path/query caps
+API5 BFLA → admin/moderator function-level authorization
+API6 Business Flows → jobs/moderation/abuse actions are limited and audited
+API7 SSRF → suspicious URI payload block + search source whitelist
+API8 Misconfiguration → security headers and method/content-type hardening
+API9 Inventory → documented route inventory and status endpoints
+API10 Unsafe API Consumption → evidence scoring and fallback behavior
+```
+
+Variables:
+
+```bash
+OWASP_HARDENING_ENABLED=1
+OWASP_BLOCK_SUSPICIOUS_INPUTS=1
+OWASP_REQUIRE_JSON_API_POSTS=1
+OWASP_CSP_ENABLED=1
+OWASP_HSTS_ENABLED=1
+OWASP_HSTS_MAX_AGE=31536000
+OWASP_MAX_QUERY_LENGTH=4096
+OWASP_MAX_PATH_LENGTH=2048
+OWASP_ALLOWED_HOSTS=claimradar.dyrakarmy.eu,dyrakarmy-claimradar-bg.hf.space
+```
+
+Проверка:
+
+```bash
+curl https://claimradar.dyrakarmy.eu/api/security/owasp/status
+curl -I https://claimradar.dyrakarmy.eu/product
+```
+
 ## Версия 3.8 — Moderation Actions
 
 Добавено:
@@ -95,99 +157,15 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - `GET /api/moderation/check/<check_id>/status`;
 - `POST /api/moderation/abuse/<report_id>/review`;
 - `GET /api/moderation/abuse/<report_id>/status`;
-- `GET /api/moderation/actions`;
-- JSONL audit trail в `data/moderation_actions.jsonl`;
-- moderator notes в `data/moderator_notes.jsonl`;
-- report status events в `data/abuse_status.jsonl`;
-- tests за hide/restore, notes, report review, moderator key и console access.
-
-Moderation workflow:
-
-```text
-reported → under_review → reviewed / dismissed / action_taken
-public check → hide/private → restore/public
-check → moderator notes → export PDF/Markdown
-```
-
-Достъп:
-
-```text
-/admin/moderation?admin_key=YOUR_ADMIN_KEY
-```
-
-Примери:
-
-```bash
-curl -X POST https://claimradar.dyrakarmy.eu/api/moderation/check/<check_id>/hide \
-  -H "Content-Type: application/json" \
-  -d '{"admin_key":"YOUR_ADMIN_KEY","reason":"privacy review"}'
-
-curl -X POST https://claimradar.dyrakarmy.eu/api/moderation/abuse/<report_id>/review \
-  -H "Content-Type: application/json" \
-  -d '{"admin_key":"YOUR_ADMIN_KEY","status":"reviewed","note":"checked"}'
-```
+- `GET /api/moderation/actions`.
 
 ## Версия 3.7 — Evidence Quality Scoring + Exports
 
-Добавено:
-
 - `evidence_export.py`;
-- evidence quality scoring за всеки evidence/source;
-- JSON evidence bundle: `/api/export/check/<check_id>`;
-- Markdown export: `/export/check/<check_id>.md`;
-- PDF export: `/export/check/<check_id>.pdf`;
-- privacy protection за private checks — export изисква admin/owner ключ;
-- `reportlab==4.2.5` за PDF export;
-- `fonts-dejavu-core` в Dockerfile за кирилица в PDF.
-
-## Версия 3.6 — Admin Dashboard
-
-- `admin_dashboard.py`;
-- `/admin`;
-- `/api/admin/status`;
-- `/api/admin/system`;
-- `/api/admin/abuse-reports`;
-- `/api/admin/recent-checks`;
-- `/api/admin/logs`.
-
-## Версия 3.5 — Custom Domain Support
-
-```text
-claimradar.dyrakarmy.eu CNAME hf.space
-```
-
-## Версия 3.4 — Real Load Testing
-
-- `scripts/load_test.py`;
-- `.github/workflows/load-test.yml`;
-- `docs/LOAD_TESTING_BG.md`.
-
-## Версия 3.3 — Auth и Admin Roles
-
-- роли: `anonymous`, `viewer`, `moderator`, `admin`, `owner`;
-- `/auth/status`, `/api/auth/whoami`, `/api/auth/roles`, `/api/auth/check`.
-
-## Версия 3.2 — Advanced Rate Limiting
-
-- per-scope rate limits;
-- temporary ban;
-- admin bypass;
-- `/rate-limit/status`, `/api/rate-limit/status`, `/api/rate-limit/reset`.
-
-## Версия 3.1 — Enhanced Background Jobs
-
-- `/jobs` dashboard;
-- `/api/jobs`, `/api/jobs/stats`, `/api/jobs/<job_id>`;
-- check / ai-verdict / real-check jobs;
-- cancel/retry/cleanup.
-
-## Версия 3.0 — Automated Tests
-
-```bash
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-pytest
-```
+- evidence quality scoring;
+- `/api/export/check/<check_id>`;
+- `/export/check/<check_id>.md`;
+- `/export/check/<check_id>.pdf`.
 
 ## Основни variables
 
