@@ -21,6 +21,8 @@ def test_required_project_files_exist():
         "moderation_console.py",
         "owasp_hardening.py",
         "hardware_inference.py",
+        "external_queue.py",
+        "queue_worker.py",
         "custom_domain.py",
         "db_storage.py",
         "security_jobs.py",
@@ -37,10 +39,12 @@ def test_required_project_files_exist():
         "scripts/package_extension.py",
         "scripts/load_test.py",
         "scripts/check_custom_domain.py",
+        "scripts/start_production.sh",
         "docs/LOAD_TESTING_BG.md",
         "docs/CUSTOM_DOMAIN_BG.md",
         "docs/SECURITY_HARDENING_BG.md",
         "docs/GPU_DEDICATED_INFERENCE_BG.md",
+        "docs/EXTERNAL_QUEUE_WORKER_BG.md",
     ]
     missing = [path for path in required if not (ROOT / path).exists()]
     assert not missing, f"Missing required files: {missing}"
@@ -72,6 +76,8 @@ def test_readme_documents_current_public_endpoints():
         "/api/admin/abuse-reports",
         "/api/admin/recent-checks",
         "/api/admin/logs",
+        "/queue/status",
+        "/api/queue/status",
         "/inference/status",
         "/api/inference/status",
         "/api/inference/recommendation",
