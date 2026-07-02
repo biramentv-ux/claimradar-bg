@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse, Response
 
 import app as app_module
 
-try:  # PDF export is optional at import time but installed in production requirements.
+try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -91,7 +91,6 @@ def score_evidence_item(claim: str, evidence: Dict[str, Any], cited: bool = Fals
     source = str(evidence.get("source") or evidence.get("name") or "")
     domain = _domain(url)
     reasons: List[str] = []
-
     base = _trusted_domain_score(domain)
     if base >= 90:
         reasons.append("официален/първичен източник")
@@ -101,14 +100,12 @@ def score_evidence_item(claim: str, evidence: Dict[str, Any], cited: bool = Fals
         reasons.append("външен източник")
     else:
         reasons.append("липсва разпознат домейн")
-
     if evidence.get("manual"):
         base -= MANUAL_SEARCH_PENALTY
         reasons.append("само ръчен search линк")
     else:
         base += 5
         reasons.append("автоматично намерен резултат")
-
     claim_tokens = _tokens(claim)
     ev_tokens = _tokens(" ".join([title, snippet, source, domain]))
     overlap = len(claim_tokens & ev_tokens)
@@ -121,7 +118,6 @@ def score_evidence_item(claim: str, evidence: Dict[str, Any], cited: bool = Fals
     else:
         base -= 6
         reasons.append("слабо текстово съвпадение")
-
     claim_numbers = _numbers(claim)
     ev_numbers = _numbers(" ".join([title, snippet]))
     if claim_numbers and claim_numbers & ev_numbers:
@@ -130,20 +126,12 @@ def score_evidence_item(claim: str, evidence: Dict[str, Any], cited: bool = Fals
     elif claim_numbers:
         base -= 4
         reasons.append("липсва числово съвпадение")
-
     if cited:
         base += 8
         reasons.append("използвано като цитат във verdict")
-
     score = max(0, min(100, int(base)))
     label = "силно evidence" if score >= 85 else "добро evidence" if score >= 70 else "средно evidence" if score >= 50 else "слабо/ръчно evidence"
-    return {
-        "score": score,
-        "label": label,
-        "domain": domain,
-        "source": source,
-        "reasons": reasons,
-    }
+    return {"score": score, "label": label, "domain": domain, "source": source, "reasons": reasons}
 
 
 def enrich_item_with_evidence_quality(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -153,7 +141,6 @@ def enrich_item_with_evidence_quality(item: Dict[str, Any]) -> Dict[str, Any]:
     evidence = list(item.get("evidence") or [])
     if not evidence and item.get("sources"):
         evidence = [dict(src, title=src.get("name", "източник"), snippet="Препоръчан source link", source=src.get("name", "source"), manual=True) for src in item.get("sources", [])]
-
     enriched_evidence = []
     scores = []
     for idx, ev in enumerate(evidence, 1):
@@ -163,7 +150,6 @@ def enrich_item_with_evidence_quality(item: Dict[str, Any]) -> Dict[str, Any]:
         enriched_evidence.append(ev_copy)
         scores.append(quality["score"])
     enriched["evidence"] = enriched_evidence
-
     if scores:
         top_score = max(scores)
         avg_score = round(statistics.mean(scores), 1)
@@ -202,11 +188,7 @@ def enrich_check_record(record: Dict[str, Any]) -> Dict[str, Any]:
             "items_scored": len(item_scores),
             "strong_items": len([s for s in item_scores if s >= 70]),
         },
-        "export_links": {
-            "json": f"/api/export/check/{record.get('id')}",
-            "markdown": f"/export/check/{record.get('id')}.md",
-            "pdf": f"/export/check/{record.get('id')}.pdf",
-        },
+        "export_links": {"json": f"/api/export/check/{record.get('id')}", "markdown": f"/export/check/{record.get('id')}.md", "pdf": f"/export/check/{record.get('id')}.pdf"},
         "disclaimer": app_module.DISCLAIMER,
     }
 
@@ -259,11 +241,7 @@ def check_to_markdown(bundle: Dict[str, Any]) -> str:
 def _register_pdf_font() -> str:
     if pdfmetrics is None or TTFont is None:
         return "Helvetica"
-    for path in [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/local/share/fonts/DejaVuSans.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    ]:
+    for path in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/local/share/fonts/DejaVuSans.ttf", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"]:
         if Path(path).exists():
             try:
                 pdfmetrics.registerFont(TTFont("DejaVuSans", path))
@@ -304,16 +282,14 @@ def markdown_to_pdf_bytes(markdown: str, title: str = "ClaimRadar BG report") ->
     return buf.getvalue()
 
 
+def _pdf_escape_line(line: str) -> str:
+    return line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
 def minimal_pdf_bytes(text: str) -> bytes:
     safe_lines = [line.encode("latin-1", "replace").decode("latin-1")[:100] for line in text.splitlines()[:70]]
-    stream = "BT /F1 10 Tf 50 800 Td 14 TL " + " ".join([f"({line.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')}) Tj T*" for line in safe_lines]) + " ET"
-    objects = [
-        "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
-        "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
-        "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj",
-        "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj",
-        f"5 0 obj << /Length {len(stream.encode('latin-1'))} >> stream\n{stream}\nendstream endobj",
-    ]
+    stream = "BT /F1 10 Tf 50 800 Td 14 TL " + " ".join([f"({_pdf_escape_line(line)}) Tj T*" for line in safe_lines]) + " ET"
+    objects = ["1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj", "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj", "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj", "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj", f"5 0 obj << /Length {len(stream.encode('latin-1'))} >> stream\n{stream}\nendstream endobj"]
     pdf = "%PDF-1.4\n"
     offsets = [0]
     for obj in objects:
@@ -351,13 +327,7 @@ def _extract_token(request: Request) -> str:
     return request.query_params.get("admin_key") or request.query_params.get("api_key") or request.headers.get("x-admin-key") or request.headers.get("x-api-key") or ""
 
 
-def register_evidence_export_routes(
-    app: FastAPI,
-    can_admin: Callable[[str], bool],
-    storage: Any,
-    read_jsonl: JsonRowsReader,
-    visibility_for: Callable[[str], str] | None = None,
-) -> None:
+def register_evidence_export_routes(app: FastAPI, can_admin: Callable[[str], bool], storage: Any, read_jsonl: JsonRowsReader, visibility_for: Callable[[str], str] | None = None) -> None:
     def get_bundle_or_response(check_id: str, request: Request):
         rec = load_check_record(storage, read_jsonl, check_id)
         if not rec:
@@ -382,8 +352,7 @@ def register_evidence_export_routes(
         if isinstance(bundle, JSONResponse):
             return bundle
         md = check_to_markdown(bundle)
-        filename = f"claimradar-{check_id}.md"
-        return Response(md, media_type="text/markdown; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+        return Response(md, media_type="text/markdown; charset=utf-8", headers={"Content-Disposition": f'attachment; filename="claimradar-{check_id}.md"'})
 
     @app.get("/export/check/{check_id}.pdf")
     def export_check_pdf(check_id: str, request: Request):
@@ -392,5 +361,4 @@ def register_evidence_export_routes(
             return bundle
         md = check_to_markdown(bundle)
         pdf = markdown_to_pdf_bytes(md, title=str(bundle.get("title") or "ClaimRadar BG report"))
-        filename = f"claimradar-{check_id}.pdf"
-        return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+        return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="claimradar-{check_id}.pdf"'})
