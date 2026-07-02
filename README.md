@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, GPU/dedicated inference option, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, external queue worker, GPU/dedicated inference option, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници и endpoints
 
@@ -26,6 +26,8 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/admin/abuse-reports
 /api/admin/recent-checks
 /api/admin/logs
+/queue/status
+/api/queue/status
 /inference/status
 /api/inference/status
 /api/inference/recommendation
@@ -85,9 +87,45 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
-## Версия 4.0 — GPU / Dedicated Inference
+## Версия 4.1 — External Queue Worker
 
 Добавено:
+
+- `external_queue.py`;
+- `queue_worker.py`;
+- `scripts/start_production.sh`;
+- `docs/EXTERNAL_QUEUE_WORKER_BG.md`;
+- `/queue/status`;
+- `/api/queue/status`;
+- durable JSONL queue files:
+  - `data/jobs.jsonl`;
+  - `data/job_payloads.jsonl`;
+  - `data/queue_worker_heartbeats.jsonl`;
+- `QueueBackedJobStore`;
+- `QueueWorker`;
+- `JOB_EXECUTION_MODE=external` mode;
+- optional worker autostart in Docker/Hugging Face;
+- tests в `tests/test_external_queue.py`;
+- CI compile check за `external_queue.py`, `queue_worker.py` и shell syntax check за startup script.
+
+External worker variables:
+
+```bash
+JOB_EXECUTION_MODE=external
+QUEUE_WORKER_AUTOSTART=1
+QUEUE_POLL_SECONDS=2.0
+QUEUE_BATCH_SIZE=1
+QUEUE_STALE_RUNNING_SECONDS=1800
+```
+
+Проверка:
+
+```bash
+curl https://claimradar.dyrakarmy.eu/api/queue/status
+curl https://claimradar.dyrakarmy.eu/api/jobs/stats
+```
+
+## Версия 4.0 — GPU / Dedicated Inference
 
 - `hardware_inference.py`;
 - `docs/GPU_DEDICATED_INFERENCE_BG.md`;
@@ -96,39 +134,7 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - dedicated transcription endpoint offload;
 - `/inference/status`;
 - `/api/inference/status`;
-- `/api/inference/recommendation`;
-- tests в `tests/test_hardware_inference.py`;
-- CI compile check за `hardware_inference.py`.
-
-Препоръчителни variables:
-
-```bash
-INFERENCE_MODE=auto
-INFERENCE_AUTO_GPU=1
-WHISPER_DEVICE=auto
-WHISPER_MODEL_SIZE=base
-WHISPER_CPU_COMPUTE_TYPE=int8
-WHISPER_GPU_COMPUTE_TYPE=float16
-WHISPER_GPU_FALLBACK_CPU=1
-```
-
-Dedicated endpoint:
-
-```bash
-INFERENCE_MODE=dedicated
-DEDICATED_INFERENCE_ENABLED=1
-DEDICATED_TRANSCRIBE_URL=https://YOUR-ENDPOINT/transcribe
-DEDICATED_INFERENCE_TOKEN=...
-DEDICATED_TRANSCRIBE_TIMEOUT=180
-DEDICATED_FALLBACK_LOCAL=1
-```
-
-Проверка:
-
-```bash
-curl https://claimradar.dyrakarmy.eu/api/inference/status
-curl https://claimradar.dyrakarmy.eu/api/inference/recommendation
-```
+- `/api/inference/recommendation`.
 
 ## Версия 3.9 — OWASP Security Hardening
 
@@ -171,6 +177,8 @@ RATE_LIMIT_HASH_SALT=random-long-string
 PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
 CUSTOM_DOMAIN=claimradar.dyrakarmy.eu
 EXPORT_MAX_ITEMS=40
+JOB_EXECUTION_MODE=external
+QUEUE_WORKER_AUTOSTART=1
 INFERENCE_MODE=auto
 WHISPER_DEVICE=auto
 WHISPER_CPU_COMPUTE_TYPE=int8
