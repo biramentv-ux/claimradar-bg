@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, production observability, external queue worker, GPU/dedicated inference option, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, OpenTelemetry tracing, Sentry error tracking, CodeQL scanning, production observability, external queue worker, GPU/dedicated inference option, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници и endpoints
 
@@ -26,6 +26,9 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/admin/abuse-reports
 /api/admin/recent-checks
 /api/admin/logs
+/telemetry/status
+/api/telemetry/status
+/api/telemetry/test-span
 /observability
 /observability/status
 /api/observability/summary
@@ -94,9 +97,51 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
-## Версия 4.2 — Production Observability
+## Версия 4.3 — OpenTelemetry + Sentry + CodeQL
 
 Добавено:
+
+- `telemetry_integrations.py`;
+- `docs/TELEMETRY_SENTRY_CODEQL_BG.md`;
+- `.github/workflows/codeql.yml`;
+- `/telemetry/status`;
+- `/api/telemetry/status`;
+- `/api/telemetry/test-span`;
+- OpenTelemetry FastAPI instrumentation;
+- OpenTelemetry requests instrumentation;
+- optional OTLP HTTP exporter;
+- optional console span exporter;
+- Sentry FastAPI integration;
+- manual `traced_span(...)` helper;
+- `capture_exception(...)` helper;
+- CodeQL workflow with `security-extended` and `security-and-quality` queries;
+- tests в `tests/test_telemetry_integrations.py`;
+- CI compile check за `telemetry_integrations.py`.
+
+Variables:
+
+```bash
+OTEL_ENABLED=1
+OTEL_SERVICE_NAME=claimradar-bg
+OTEL_SAMPLE_RATE=1.0
+OTEL_FASTAPI_INSTRUMENTATION_ENABLED=1
+OTEL_REQUESTS_INSTRUMENTATION_ENABLED=1
+OTEL_EXPORTER_OTLP_ENDPOINT=https://YOUR-OTEL-COLLECTOR/v1/traces
+OTEL_CONSOLE_EXPORTER_ENABLED=0
+SENTRY_ENABLED=1
+SENTRY_ENVIRONMENT=production
+SENTRY_TRACES_SAMPLE_RATE=0.1
+SENTRY_PROFILES_SAMPLE_RATE=0
+```
+
+Проверка:
+
+```bash
+curl https://claimradar.dyrakarmy.eu/api/telemetry/status
+curl -X POST https://claimradar.dyrakarmy.eu/api/telemetry/test-span
+```
+
+## Версия 4.2 — Production Observability
 
 - `production_observability.py`;
 - `docs/PRODUCTION_OBSERVABILITY_BG.md`;
@@ -106,47 +151,7 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - `/api/observability/providers`;
 - `/api/observability/costs`;
 - admin-protected `POST /api/observability/ai-usage`;
-- Prometheus-compatible `/metrics`;
-- token/cost JSONL tracking в `data/ai_usage_costs.jsonl`;
-- provider health summary за search и AI providers;
-- tests в `tests/test_production_observability.py`;
-- CI compile check за `production_observability.py`.
-
-Следи:
-
-```text
-uptime
-latency avg / p50 / p95 / p99
-error rate
-recent errors
-requests/status codes
-jobs stats
-queue status
-DB status
-search provider health
-AI provider health
-token usage
-estimated AI cost
-recent system events
-```
-
-Variables:
-
-```bash
-OBSERVABILITY_ENABLED=1
-OBSERVABILITY_PROMETHEUS_ENABLED=1
-OBSERVABILITY_LATENCY_SLO_MS=2500
-OBSERVABILITY_ERROR_RATE_SLO=0.05
-OPENAI_INPUT_COST_PER_1M=...
-OPENAI_OUTPUT_COST_PER_1M=...
-```
-
-Проверка:
-
-```bash
-curl https://claimradar.dyrakarmy.eu/api/observability/summary
-curl https://claimradar.dyrakarmy.eu/metrics
-```
+- Prometheus-compatible `/metrics`.
 
 ## Версия 4.1 — External Queue Worker
 
@@ -193,6 +198,7 @@ PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu
 CUSTOM_DOMAIN=claimradar.dyrakarmy.eu
 EXPORT_MAX_ITEMS=40
 OBSERVABILITY_ENABLED=1
+OTEL_ENABLED=1
 JOB_EXECUTION_MODE=external
 QUEUE_WORKER_AUTOSTART=1
 INFERENCE_MODE=auto
