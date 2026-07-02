@@ -6,11 +6,11 @@ os.environ.setdefault("MONITORING_ENABLED", "1")
 os.environ.setdefault("REQUEST_LOG_ENABLED", "0")
 os.environ.setdefault("AUTH_ENABLED", "1")
 os.environ.setdefault("ADMIN_KEY", "test-admin-key")
-os.environ.setdefault("JOB_EXECUTION_MODE", "celery")
-os.environ.setdefault("CELERY_BROKER_URL", "memory://")
-os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
-os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "0")
-os.environ.setdefault("CELERY_QUEUE_NAME", "claimradar-test")
+os.environ["JOB_EXECUTION_MODE"] = "celery"
+os.environ["CELERY_BROKER_URL"] = "memory://"
+os.environ["CELERY_RESULT_BACKEND"] = "cache+memory://"
+os.environ["CELERY_TASK_ALWAYS_EAGER"] = "0"
+os.environ["CELERY_QUEUE_NAME"] = "claimradar-test"
 os.environ.setdefault("WHISPER_MODEL_SIZE", "tiny")
 os.environ.setdefault("WHISPER_DEVICE", "cpu")
 os.environ.setdefault("WHISPER_COMPUTE_TYPE", "int8")
