@@ -26,6 +26,10 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/admin/abuse-reports
 /api/admin/recent-checks
 /api/admin/logs
+/sentry/status
+/api/sentry/status
+/api/sentry/test-event
+/api/sentry/test-error
 /telemetry/status
 /api/telemetry/status
 /api/telemetry/test-span
@@ -104,16 +108,23 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - `telemetry_integrations.py`;
 - `docs/TELEMETRY_SENTRY_CODEQL_BG.md`;
 - `.github/workflows/codeql.yml`;
+- `/sentry/status`;
+- `/api/sentry/status`;
+- protected `POST /api/sentry/test-event`;
+- protected `POST /api/sentry/test-error`;
 - `/telemetry/status`;
 - `/api/telemetry/status`;
 - `/api/telemetry/test-span`;
 - OpenTelemetry FastAPI instrumentation;
 - OpenTelemetry requests instrumentation;
 - optional OTLP HTTP exporter;
-- optional console span exporter;
 - Sentry FastAPI integration;
+- Sentry message/error capture helpers;
+- Sentry event/breadcrumb scrubber за sensitive keys;
+- `send_default_pii=False` by default;
 - manual `traced_span(...)` helper;
 - `capture_exception(...)` helper;
+- `capture_message(...)` helper;
 - CodeQL workflow with `security-extended` and `security-and-quality` queries;
 - tests в `tests/test_telemetry_integrations.py`;
 - CI compile check за `telemetry_integrations.py`.
@@ -130,6 +141,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=https://YOUR-OTEL-COLLECTOR/v1/traces
 OTEL_CONSOLE_EXPORTER_ENABLED=0
 SENTRY_ENABLED=1
 SENTRY_ENVIRONMENT=production
+SENTRY_SEND_DEFAULT_PII=0
+SENTRY_TEST_EVENTS_ENABLED=1
 SENTRY_TRACES_SAMPLE_RATE=0.1
 SENTRY_PROFILES_SAMPLE_RATE=0
 ```
@@ -137,7 +150,8 @@ SENTRY_PROFILES_SAMPLE_RATE=0
 Проверка:
 
 ```bash
-curl https://claimradar.dyrakarmy.eu/api/telemetry/status
+curl https://claimradar.dyrakarmy.eu/api/sentry/status
+curl -X POST https://claimradar.dyrakarmy.eu/api/sentry/test-event
 curl -X POST https://claimradar.dyrakarmy.eu/api/telemetry/test-span
 ```
 
@@ -150,7 +164,7 @@ curl -X POST https://claimradar.dyrakarmy.eu/api/telemetry/test-span
 - `/api/observability/summary`;
 - `/api/observability/providers`;
 - `/api/observability/costs`;
-- admin-protected `POST /api/observability/ai-usage`;
+- protected `POST /api/observability/ai-usage`;
 - Prometheus-compatible `/metrics`.
 
 ## Версия 4.1 — External Queue Worker
@@ -199,6 +213,7 @@ CUSTOM_DOMAIN=claimradar.dyrakarmy.eu
 EXPORT_MAX_ITEMS=40
 OBSERVABILITY_ENABLED=1
 OTEL_ENABLED=1
+SENTRY_ENABLED=1
 JOB_EXECUTION_MODE=external
 QUEUE_WORKER_AUTOSTART=1
 INFERENCE_MODE=auto
