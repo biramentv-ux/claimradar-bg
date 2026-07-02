@@ -25,14 +25,16 @@ from owasp_hardening import OWASPHardeningMiddleware, register_owasp_routes
 from production_observability import register_observability_routes
 from rate_limit_api import register_rate_limit_routes
 from security_jobs import SecurityAndRateLimitMiddleware
+from telemetry_integrations import init_telemetry, register_telemetry_routes
 
 base_launch.job_store = maybe_external_job_store(base_launch.job_store, app_module.DATA_DIR)
 persistent.can_admin = is_admin_key
 
-app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.2-production-observability")
+app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.3-telemetry-sentry-codeql")
 app.add_middleware(SecurityAndRateLimitMiddleware)
 app.add_middleware(MonitoringMiddleware)
 app.add_middleware(OWASPHardeningMiddleware)
+init_telemetry(app)
 
 
 def can_admin(admin_key: str = "") -> bool:
@@ -63,16 +65,10 @@ register_auth_routes(app, can_admin)
 register_inference_routes(app, app_module)
 register_external_queue_routes(app, base_launch.job_store)
 register_observability_routes(app, can_admin, base_launch.job_store, storage, persistent._original_read_jsonl)
+register_telemetry_routes(app)
 register_owasp_routes(app)
 register_rate_limit_routes(app, can_admin)
-register_job_routes(
-    app,
-    base_launch.job_store,
-    can_admin,
-    base_launch.run_check_job,
-    base_launch.run_ai_verdict_job,
-    base_launch.run_real_check_job,
-)
+register_job_routes(app, base_launch.job_store, can_admin, base_launch.run_check_job, base_launch.run_ai_verdict_job, base_launch.run_real_check_job)
 register_admin_dashboard_routes(app, can_admin, storage, base_launch.job_store, persistent._original_read_jsonl)
 register_evidence_export_routes(app, can_admin, storage, persistent._original_read_jsonl, base_launch.visibility_for)
 register_moderation_routes(app, can_admin, persistent._original_read_jsonl)
@@ -85,7 +81,8 @@ async def auth_db_migrate_jsonl(request: Request):
         payload = await request.json()
     except Exception:
         payload = {}
-    if not can_admin(str(payload.get("admin_key", ""))):
+    token = str(payload.get("admin_key", ""))
+    if not can_admin(token):
         return JSONResponse({"ok": False, "error": "invalid_admin_key"}, status_code=403)
     if not storage.configured:
         return JSONResponse({"ok": False, "error": "database_not_configured"}, status_code=400)
