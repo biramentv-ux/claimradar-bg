@@ -25,7 +25,7 @@ from owasp_hardening import OWASPHardeningMiddleware, register_owasp_routes
 from production_observability import register_observability_routes
 from rate_limit_api import register_rate_limit_routes
 from security_jobs import SecurityAndRateLimitMiddleware
-from telemetry_integrations import init_telemetry, register_telemetry_routes
+from telemetry_integrations import init_telemetry, register_sentry_routes, register_telemetry_routes
 
 base_launch.job_store = maybe_external_job_store(base_launch.job_store, app_module.DATA_DIR)
 persistent.can_admin = is_admin_key
@@ -66,6 +66,7 @@ register_inference_routes(app, app_module)
 register_external_queue_routes(app, base_launch.job_store)
 register_observability_routes(app, can_admin, base_launch.job_store, storage, persistent._original_read_jsonl)
 register_telemetry_routes(app)
+register_sentry_routes(app, can_admin)
 register_owasp_routes(app)
 register_rate_limit_routes(app, can_admin)
 register_job_routes(app, base_launch.job_store, can_admin, base_launch.run_check_job, base_launch.run_ai_verdict_job, base_launch.run_real_check_job)
