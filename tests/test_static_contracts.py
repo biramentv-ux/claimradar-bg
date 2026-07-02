@@ -15,6 +15,7 @@ def test_required_project_files_exist():
         "persistent_launch.py",
         "auth_launch.py",
         "auth_roles.py",
+        "custom_domain.py",
         "db_storage.py",
         "security_jobs.py",
         "jobs_api.py",
@@ -29,7 +30,9 @@ def test_required_project_files_exist():
         "supabase/schema.sql",
         "scripts/package_extension.py",
         "scripts/load_test.py",
+        "scripts/check_custom_domain.py",
         "docs/LOAD_TESTING_BG.md",
+        "docs/CUSTOM_DOMAIN_BG.md",
     ]
     missing = [path for path in required if not (ROOT / path).exists()]
     assert not missing, f"Missing required files: {missing}"
@@ -60,6 +63,9 @@ def test_readme_documents_current_public_endpoints():
         "/sources",
         "/contact",
         "/db/status",
+        "/custom-domain",
+        "/custom-domain/status",
+        "/api/custom-domain/status",
         "/auth/status",
         "/api/auth/whoami",
         "/api/auth/roles",
@@ -85,6 +91,7 @@ def test_workflows_exist():
         ".github/workflows/build-extension.yml",
         ".github/workflows/tests.yml",
         ".github/workflows/load-test.yml",
+        ".github/workflows/custom-domain-check.yml",
     ]
     missing = [path for path in workflows if not (ROOT / path).exists()]
     assert not missing, f"Missing workflows: {missing}"
