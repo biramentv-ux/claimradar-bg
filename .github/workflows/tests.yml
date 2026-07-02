@@ -42,6 +42,10 @@ jobs:
       OPENAI_OUTPUT_COST_PER_1M: "2.0"
       JOB_EXECUTION_MODE: "thread"
       QUEUE_WORKER_AUTOSTART: "0"
+      CELERY_ENABLED: "1"
+      CELERY_BROKER_URL: "memory://"
+      CELERY_RESULT_BACKEND: "cache+memory://"
+      CELERY_QUEUE_NAME: "claimradar-test"
       INFERENCE_MODE: "auto"
       INFERENCE_AUTO_GPU: "1"
       WHISPER_CPU_COMPUTE_TYPE: "int8"
@@ -76,7 +80,7 @@ jobs:
 
       - name: Compile Python files
         run: |
-          python -m py_compile app.py launch.py persistent_launch.py auth_launch.py auth_roles.py admin_dashboard.py evidence_export.py moderation_actions.py moderation_console.py owasp_hardening.py hardware_inference.py external_queue.py queue_worker.py production_observability.py telemetry_integrations.py custom_domain.py db_storage.py security_jobs.py jobs_api.py persistent_jobs.py rate_limit_api.py monitoring.py search_providers.py scripts/package_extension.py scripts/load_test.py scripts/check_custom_domain.py
+          python -m py_compile app.py launch.py persistent_launch.py auth_launch.py auth_launch_celery.py auth_roles.py admin_dashboard.py evidence_export.py moderation_actions.py moderation_console.py owasp_hardening.py hardware_inference.py external_queue.py queue_worker.py celery_queue.py production_observability.py telemetry_integrations.py custom_domain.py db_storage.py security_jobs.py jobs_api.py persistent_jobs.py rate_limit_api.py monitoring.py search_providers.py scripts/package_extension.py scripts/load_test.py scripts/check_custom_domain.py
 
       - name: Shell syntax check
         run: sh -n scripts/start_production.sh
