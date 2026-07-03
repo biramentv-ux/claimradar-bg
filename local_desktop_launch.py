@@ -17,10 +17,21 @@ os.environ.setdefault("WHISPER_MODEL_SIZE", "large-v3")
 os.environ.setdefault("WHISPER_DEVICE", "auto")
 os.environ.setdefault("WHISPER_COMPUTE_TYPE", "int8")
 os.environ.setdefault("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+os.environ.setdefault("MOBILE_REMOTE_ENABLED", "1")
+os.environ.setdefault("MOBILE_REMOTE_REQUIRE_PIN", "1")
 
 import auth_launch
 import uvicorn
 
 
+def desktop_host() -> str:
+    explicit = os.getenv("LOCAL_DESKTOP_HOST", "").strip()
+    if explicit:
+        return explicit
+    if os.getenv("MOBILE_REMOTE_BIND_LAN", "0").lower() in {"1", "true", "yes"}:
+        return "0.0.0.0"
+    return "127.0.0.1"
+
+
 if __name__ == "__main__":
-    uvicorn.run(auth_launch.app, host="127.0.0.1", port=int(os.getenv("APP_PORT", "8765")))
+    uvicorn.run(auth_launch.app, host=desktop_host(), port=int(os.getenv("APP_PORT", "8765")))
