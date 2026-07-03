@@ -18,8 +18,12 @@ from db_storage import storage
 from evidence_export import register_evidence_export_routes
 from jobs_api import register_job_routes
 from local_ai_runtime import register_local_ai_runtime_routes
+from local_archive import register_local_archive_routes
+from local_llm_engine import register_local_llm_routes
 from local_model_manager import register_local_model_manager_routes
 from local_model_manager_static import register_local_model_manager_static_routes
+from local_storage_sqlite import register_local_sqlite_routes
+from local_transcription import register_local_transcription_routes
 from moderation_actions import register_moderation_routes
 from moderation_console import register_moderation_console_routes
 from monitoring import MonitoringMiddleware
@@ -34,7 +38,7 @@ from telemetry_integrations import init_telemetry, register_sentry_routes, regis
 base_launch.job_store = maybe_external_job_store(base_launch.job_store, app_module.DATA_DIR)
 persistent.can_admin = is_admin_key
 
-app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.9-local-model-manager")
+app = FastAPI(title="ClaimRadar BG Auth Layer", version="5.0-local-engines")
 app.add_middleware(SecurityAndRateLimitMiddleware)
 app.add_middleware(MonitoringMiddleware)
 app.add_middleware(OWASPHardeningMiddleware)
@@ -70,6 +74,10 @@ register_supabase_auth_ui_routes(app)
 register_local_ai_runtime_routes(app)
 register_local_model_manager_static_routes(app)
 register_local_model_manager_routes(app)
+register_local_llm_routes(app)
+register_local_transcription_routes(app)
+register_local_sqlite_routes(app)
+register_local_archive_routes(app)
 register_inference_routes(app, app_module)
 register_queue_backend_routes(app, base_launch.job_store)
 register_observability_routes(app, can_admin, base_launch.job_store, storage, persistent._original_read_jsonl)
