@@ -17,6 +17,7 @@ from custom_domain import register_custom_domain_routes
 from db_storage import storage
 from evidence_export import register_evidence_export_routes
 from jobs_api import register_job_routes
+from local_ai_runtime import register_local_ai_runtime_routes
 from moderation_actions import register_moderation_routes
 from moderation_console import register_moderation_console_routes
 from monitoring import MonitoringMiddleware
@@ -31,7 +32,7 @@ from telemetry_integrations import init_telemetry, register_sentry_routes, regis
 base_launch.job_store = maybe_external_job_store(base_launch.job_store, app_module.DATA_DIR)
 persistent.can_admin = is_admin_key
 
-app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.7-external-worker")
+app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.8-local-ai-desktop")
 app.add_middleware(SecurityAndRateLimitMiddleware)
 app.add_middleware(MonitoringMiddleware)
 app.add_middleware(OWASPHardeningMiddleware)
@@ -64,6 +65,7 @@ def migrate_jsonl_to_db() -> dict:
 register_custom_domain_routes(app)
 register_auth_routes(app, can_admin)
 register_supabase_auth_ui_routes(app)
+register_local_ai_runtime_routes(app)
 register_inference_routes(app, app_module)
 register_queue_backend_routes(app, base_launch.job_store)
 register_observability_routes(app, can_admin, base_launch.job_store, storage, persistent._original_read_jsonl)
