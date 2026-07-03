@@ -12,6 +12,7 @@
   "build": {
     "appId": "eu.dyrakarmy.claimradarbg.desktop",
     "productName": "ClaimRadar BG Desktop",
+    "copyright": "Copyright © 2026 DyrakArmy",
     "directories": {
       "output": "../../dist/desktop"
     },
@@ -29,7 +30,11 @@
     ],
     "win": {
       "target": ["nsis", "portable"],
-      "artifactName": "ClaimRadarBG-${version}-${arch}.${ext}"
+      "artifactName": "ClaimRadarBG-${version}-${arch}.${ext}",
+      "publisherName": "DyrakArmy",
+      "verifyUpdateCodeSignature": true,
+      "signAndEditExecutable": true,
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,
@@ -38,7 +43,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "ClaimRadar BG"
+      "shortcutName": "ClaimRadar BG",
+      "deleteAppDataOnUninstall": false,
+      "displayLanguageSelector": false
     }
   },
   "devDependencies": {
