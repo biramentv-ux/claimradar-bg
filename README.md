@@ -11,7 +11,7 @@ license: mit
 
 # ClaimRadar BG
 
-Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, OpenTelemetry tracing, Sentry error tracking, CodeQL scanning, production observability, external queue worker, GPU/dedicated inference option, browser extension, public result pages, OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
+Hugging Face-ready Docker приложение за България с Gradio UI, FastAPI, realtime WebSocket, AI verdict, Search API слой, OpenTelemetry tracing, Sentry error tracking, CodeQL scanning, production observability, external queue worker, GPU/dedicated inference option, browser extension, public result pages, expanded OWASP security hardening, moderation console, evidence quality scoring, Markdown/PDF exports, admin dashboard, custom domain support, auth/admin roles, legal/methodology pages, monitoring/logging, automated tests, real load testing, advanced rate limiting, enhanced background jobs и persistent PostgreSQL/Supabase storage.
 
 ## Основни публични страници и endpoints
 
@@ -47,6 +47,9 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/inference/recommendation
 /security/owasp/status
 /api/security/owasp/status
+/security/owasp/headers
+/api/security/owasp/headers
+/.well-known/security.txt
 /api/moderation/actions
 /api/moderation/check/<check_id>/hide
 /api/moderation/check/<check_id>/restore
@@ -101,9 +104,38 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/check/<share_id>
 ```
 
-## Версия 4.3 — OpenTelemetry + Sentry + CodeQL
+## Версия 4.5 — Expanded OWASP Security Hardening
 
 Добавено:
+
+- разширен `owasp_hardening.py`;
+- `/security/owasp/headers`;
+- `/api/security/owasp/headers`;
+- `/.well-known/security.txt`;
+- CSP `frame-ancestors` за Hugging Face App таба;
+- optional `Content-Security-Policy-Report-Only`;
+- CRLF/header injection block;
+- high-confidence XSS/iframe/event-handler probes block;
+- high-confidence SQLi `union select` probe block;
+- Log4Shell-style `${jndi:...}` probe block;
+- `X-XSS-Protection: 0`;
+- `X-Permitted-Cross-Domain-Policies: none`;
+- `Cross-Origin-Resource-Policy: same-site`;
+- `Origin-Agent-Cluster: ?1`;
+- `Set-Cookie` hardening with `Secure`, `HttpOnly`, `SameSite=Lax` when missing;
+- extra no-store coverage for sentry/telemetry/observability sensitive endpoints;
+- expanded tests in `tests/test_owasp_hardening.py`.
+
+Проверка:
+
+```bash
+curl https://claimradar.dyrakarmy.eu/api/security/owasp/status
+curl https://claimradar.dyrakarmy.eu/api/security/owasp/headers
+curl https://claimradar.dyrakarmy.eu/.well-known/security.txt
+pytest tests/test_owasp_hardening.py
+```
+
+## Версия 4.3 — OpenTelemetry + Sentry + CodeQL
 
 - `telemetry_integrations.py`;
 - `docs/TELEMETRY_SENTRY_CODEQL_BG.md`;
@@ -128,32 +160,6 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - CodeQL workflow with `security-extended` and `security-and-quality` queries;
 - tests в `tests/test_telemetry_integrations.py`;
 - CI compile check за `telemetry_integrations.py`.
-
-Variables:
-
-```bash
-OTEL_ENABLED=1
-OTEL_SERVICE_NAME=claimradar-bg
-OTEL_SAMPLE_RATE=1.0
-OTEL_FASTAPI_INSTRUMENTATION_ENABLED=1
-OTEL_REQUESTS_INSTRUMENTATION_ENABLED=1
-OTEL_EXPORTER_OTLP_ENDPOINT=https://YOUR-OTEL-COLLECTOR/v1/traces
-OTEL_CONSOLE_EXPORTER_ENABLED=0
-SENTRY_ENABLED=1
-SENTRY_ENVIRONMENT=production
-SENTRY_SEND_DEFAULT_PII=0
-SENTRY_TEST_EVENTS_ENABLED=1
-SENTRY_TRACES_SAMPLE_RATE=0.1
-SENTRY_PROFILES_SAMPLE_RATE=0
-```
-
-Проверка:
-
-```bash
-curl https://claimradar.dyrakarmy.eu/api/sentry/status
-curl -X POST https://claimradar.dyrakarmy.eu/api/sentry/test-event
-curl -X POST https://claimradar.dyrakarmy.eu/api/telemetry/test-span
-```
 
 ## Версия 4.2 — Production Observability
 
@@ -214,6 +220,8 @@ EXPORT_MAX_ITEMS=40
 OBSERVABILITY_ENABLED=1
 OTEL_ENABLED=1
 SENTRY_ENABLED=1
+OWASP_HARDENING_ENABLED=1
+OWASP_COOKIE_HARDENING_ENABLED=1
 JOB_EXECUTION_MODE=external
 QUEUE_WORKER_AUTOSTART=1
 INFERENCE_MODE=auto
