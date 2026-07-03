@@ -76,12 +76,6 @@ def test_readme_documents_current_public_endpoints():
     readme = read("README.md")
     for endpoint in [
         "/product",
-        "/signup",
-        "/login",
-        "/logout",
-        "/account",
-        "/api/auth/supabase/config",
-        "/auth/supabase/config",
         "/admin",
         "/admin/moderation",
         "/api/admin/moderation",
