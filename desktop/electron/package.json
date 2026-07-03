@@ -1,0 +1,48 @@
+{
+  "name": "claimradar-bg-desktop",
+  "version": "0.1.0",
+  "description": "ClaimRadar BG local AI desktop shell with Python backend sidecar",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "build": {
+    "appId": "eu.dyrakarmy.claimradarbg.desktop",
+    "productName": "ClaimRadar BG Desktop",
+    "directories": {
+      "output": "../../dist/desktop"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../../dist/desktop-backend",
+        "to": "backend",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "artifactName": "ClaimRadarBG-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ClaimRadar BG"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  }
+}
