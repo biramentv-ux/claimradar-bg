@@ -1,4 +1,5 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
@@ -7,14 +8,39 @@ const LOCAL_URL = `http://127.0.0.1:${BACKEND_PORT}`;
 const DESKTOP_URL = `${LOCAL_URL}/desktop`;
 let backendProcess = null;
 
-function backendExecutable() {
+function repoRoot() {
+  return path.resolve(__dirname, '..', '..');
+}
+
+function existingFile(candidates) {
+  return candidates.find(candidate => candidate && fs.existsSync(candidate));
+}
+
+function backendLaunchPlan() {
   const exeName = process.platform === 'win32' ? 'claimradar_backend.exe' : 'claimradar_backend';
-  return path.join(process.resourcesPath || __dirname, 'backend', exeName);
+  const resources = process.resourcesPath || __dirname;
+  const packagedExe = existingFile([
+    path.join(resources, 'backend', exeName),
+    path.join(resources, 'backend', 'claimradar_backend', exeName),
+    path.join(resources, 'app.asar.unpacked', 'backend', exeName),
+    path.join(resources, 'app.asar.unpacked', 'backend', 'claimradar_backend', exeName),
+    path.join(__dirname, '..', '..', 'dist', 'desktop-backend', 'claimradar_backend', exeName),
+    path.join(__dirname, '..', '..', 'dist', 'desktop-backend', exeName)
+  ]);
+  if (packagedExe) {
+    return { command: packagedExe, args: [], cwd: path.dirname(packagedExe), mode: 'executable' };
+  }
+  const script = path.join(repoRoot(), 'local_desktop_launch.py');
+  if (fs.existsSync(script)) {
+    const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+    return { command: pythonCommand, args: [script], cwd: repoRoot(), mode: 'python-dev' };
+  }
+  return { command: '', args: [], cwd: repoRoot(), mode: 'missing' };
 }
 
 function startBackend() {
   if (process.env.CLAIMRADAR_EXTERNAL_BACKEND === '1') return;
-  const executable = backendExecutable();
+  const plan = backendLaunchPlan();
   const env = {
     ...process.env,
     APP_PORT: BACKEND_PORT,
@@ -34,21 +60,31 @@ function startBackend() {
     DB_ENABLED: '0',
     RATE_LIMIT_ENABLED: '0'
   };
+  if (!plan.command) {
+    console.error('ClaimRadar backend sidecar not found. Build backend with scripts/build_desktop_backend.py.');
+    return;
+  }
   try {
-    backendProcess = spawn(executable, [], { env, windowsHide: true, stdio: 'ignore' });
+    console.log(`Starting ClaimRadar backend (${plan.mode}): ${plan.command} ${plan.args.join(' ')}`);
+    backendProcess = spawn(plan.command, plan.args, { env, cwd: plan.cwd, windowsHide: true, stdio: 'ignore' });
+    backendProcess.on('error', error => console.error('Backend process error:', error));
   } catch (error) {
     console.error('Failed to start backend sidecar:', error);
   }
 }
 
-async function waitForBackend(timeoutMs = 30000) {
+async function waitForBackend(timeoutMs = 45000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     try {
       const response = await fetch(`${LOCAL_URL}/health`);
       if (response.ok) return true;
     } catch (_) {}
-    await new Promise(resolve => setTimeout(resolve, 600));
+    try {
+      const response = await fetch(`${LOCAL_URL}/api/local-ai/status`);
+      if (response.ok) return true;
+    } catch (_) {}
+    await new Promise(resolve => setTimeout(resolve, 700));
   }
   return false;
 }
