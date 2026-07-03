@@ -15,6 +15,7 @@ def test_required_project_files_exist():
         "persistent_launch.py",
         "auth_launch.py",
         "auth_roles.py",
+        "supabase_auth_ui.py",
         "admin_dashboard.py",
         "evidence_export.py",
         "moderation_actions.py",
@@ -51,6 +52,7 @@ def test_required_project_files_exist():
         "docs/PRODUCTION_OBSERVABILITY_BG.md",
         "docs/TELEMETRY_SENTRY_CODEQL_BG.md",
         "docs/EXTENSION_STORE_POLISH_BG.md",
+        "docs/SUPABASE_AUTH_UI_BG.md",
     ]
     missing = [path for path in required if not (ROOT / path).exists()]
     assert not missing, f"Missing required files: {missing}"
@@ -74,6 +76,12 @@ def test_readme_documents_current_public_endpoints():
     readme = read("README.md")
     for endpoint in [
         "/product",
+        "/signup",
+        "/login",
+        "/logout",
+        "/account",
+        "/api/auth/supabase/config",
+        "/auth/supabase/config",
         "/admin",
         "/admin/moderation",
         "/api/admin/moderation",
