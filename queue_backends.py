@@ -35,20 +35,25 @@ def maybe_external_job_store(current_store: Any, data_dir: Path) -> Any:
 
 def queue_backend_status(store: Any) -> Dict[str, Any]:
     is_external = type(store).__name__ in {"QueueBackedJobStore", "PostgresQueueBackedJobStore"}
+    configured = bool(getattr(store, "configured", True))
     status: Dict[str, Any] = {
         "enabled": JOB_EXECUTION_MODE in {"external", "hybrid"},
         "execution_mode": JOB_EXECUTION_MODE,
         "queue_backend": QUEUE_BACKEND,
         "store_type": type(store).__name__,
         "external_store_active": is_external,
+        "store_configured": configured,
         "poll_seconds": QUEUE_POLL_SECONDS,
         "batch_size": QUEUE_BATCH_SIZE,
         "stale_running_seconds": QUEUE_STALE_RUNNING_SECONDS,
         "worker_id_example": QUEUE_WORKER_ID,
     }
-    if is_external:
+    if is_external and configured:
         status["stats"] = store.stats()
         status["heartbeats"] = store.worker_heartbeats(limit=10)
+    elif is_external:
+        status["stats"] = {"configured": False, "warning": "queue store is not configured"}
+        status["heartbeats"] = []
     return status
 
 
