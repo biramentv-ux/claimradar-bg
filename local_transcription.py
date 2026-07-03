@@ -46,58 +46,64 @@ def _segments_to_dicts(segments: Any) -> List[Dict[str, Any]]:
 
 
 def transcribe_with_faster_whisper(path: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
+    started = time.time()
     try:
         from faster_whisper import WhisperModel
     except Exception as exc:
         return {"ok": False, "error": "faster_whisper_not_installed", "details": str(exc)}
-    started = time.time()
-    model = WhisperModel(str(cfg.get("model") or "large-v3"), device=str(cfg.get("device") or "auto"), compute_type=str(cfg.get("compute_type") or "int8"))
-    segments, info = model.transcribe(path, beam_size=5, vad_filter=True)
-    rows = _segments_to_dicts(list(segments))
-    return {
-        "ok": True,
-        "engine": "faster-whisper",
-        "model": cfg.get("model"),
-        "device": cfg.get("device"),
-        "compute_type": cfg.get("compute_type"),
-        "language": getattr(info, "language", None),
-        "language_probability": getattr(info, "language_probability", None),
-        "duration_seconds": round(time.time() - started, 3),
-        "text": " ".join(row.get("text", "") for row in rows).strip(),
-        "segments": rows,
-    }
+    try:
+        model = WhisperModel(str(cfg.get("model") or "large-v3"), device=str(cfg.get("device") or "auto"), compute_type=str(cfg.get("compute_type") or "int8"))
+        segments, info = model.transcribe(path, beam_size=5, vad_filter=True)
+        rows = _segments_to_dicts(list(segments))
+        return {
+            "ok": True,
+            "engine": "faster-whisper",
+            "model": cfg.get("model"),
+            "device": cfg.get("device"),
+            "compute_type": cfg.get("compute_type"),
+            "language": getattr(info, "language", None),
+            "language_probability": getattr(info, "language_probability", None),
+            "duration_seconds": round(time.time() - started, 3),
+            "text": " ".join(row.get("text", "") for row in rows).strip(),
+            "segments": rows,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": "faster_whisper_transcription_failed", "details": str(exc), "duration_seconds": round(time.time() - started, 3)}
 
 
 def transcribe_with_whisperx(path: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
+    started = time.time()
     try:
         import whisperx
     except Exception as exc:
         return {"ok": False, "error": "whisperx_not_installed", "details": str(exc)}
-    started = time.time()
-    device = "cuda" if str(cfg.get("device")) == "cuda" else "cpu"
-    compute_type = str(cfg.get("compute_type") or ("float16" if device == "cuda" else "int8"))
-    model_name = str(cfg.get("model") or "large-v3")
-    model = whisperx.load_model(model_name, device, compute_type=compute_type)
-    audio = whisperx.load_audio(path)
-    result = model.transcribe(audio, batch_size=int((cfg.get("whisperx") or {}).get("batch_size") or 8))
     try:
-        align_model, metadata = whisperx.load_align_model(language_code=result.get("language", "en"), device=device)
-        result = whisperx.align(result.get("segments", []), align_model, metadata, audio, device, return_char_alignments=False)
+        device = "cuda" if str(cfg.get("device")) == "cuda" else "cpu"
+        compute_type = str(cfg.get("compute_type") or ("float16" if device == "cuda" else "int8"))
+        model_name = str(cfg.get("model") or "large-v3")
+        model = whisperx.load_model(model_name, device, compute_type=compute_type)
+        audio = whisperx.load_audio(path)
+        result = model.transcribe(audio, batch_size=int((cfg.get("whisperx") or {}).get("batch_size") or 8))
+        try:
+            align_model, metadata = whisperx.load_align_model(language_code=result.get("language", "en"), device=device)
+            result = whisperx.align(result.get("segments", []), align_model, metadata, audio, device, return_char_alignments=False)
+        except Exception as exc:
+            result.setdefault("alignment_warning", str(exc))
+        rows = _segments_to_dicts(result.get("segments", []))
+        return {
+            "ok": True,
+            "engine": "whisperx",
+            "model": model_name,
+            "device": device,
+            "compute_type": compute_type,
+            "language": result.get("language"),
+            "duration_seconds": round(time.time() - started, 3),
+            "text": " ".join(row.get("text", "") for row in rows).strip(),
+            "segments": rows,
+            "raw_keys": sorted(result.keys()),
+        }
     except Exception as exc:
-        result.setdefault("alignment_warning", str(exc))
-    rows = _segments_to_dicts(result.get("segments", []))
-    return {
-        "ok": True,
-        "engine": "whisperx",
-        "model": model_name,
-        "device": device,
-        "compute_type": compute_type,
-        "language": result.get("language"),
-        "duration_seconds": round(time.time() - started, 3),
-        "text": " ".join(row.get("text", "") for row in rows).strip(),
-        "segments": rows,
-        "raw_keys": sorted(result.keys()),
-    }
+        return {"ok": False, "error": "whisperx_transcription_failed", "details": str(exc), "duration_seconds": round(time.time() - started, 3)}
 
 
 def local_transcribe_file(path: str, engine: str | None = None) -> Dict[str, Any]:
