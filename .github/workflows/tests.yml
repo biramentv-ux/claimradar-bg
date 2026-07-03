@@ -38,6 +38,9 @@ jobs:
       OBSERVABILITY_PROMETHEUS_ENABLED: "1"
       OTEL_ENABLED: "1"
       OTEL_CONSOLE_EXPORTER_ENABLED: "0"
+      SUPABASE_AUTH_UI_ENABLED: "1"
+      SUPABASE_URL: "https://rsknkjmzjpewhebwfffz.supabase.co"
+      SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test"
       OPENAI_INPUT_COST_PER_1M: "1.0"
       OPENAI_OUTPUT_COST_PER_1M: "2.0"
       JOB_EXECUTION_MODE: "thread"
@@ -80,7 +83,7 @@ jobs:
 
       - name: Compile Python files
         run: |
-          python -m py_compile app.py launch.py persistent_launch.py auth_launch.py auth_launch_celery.py auth_roles.py admin_dashboard.py evidence_export.py moderation_actions.py moderation_console.py owasp_hardening.py hardware_inference.py external_queue.py queue_worker.py celery_queue.py production_observability.py telemetry_integrations.py custom_domain.py db_storage.py security_jobs.py jobs_api.py persistent_jobs.py rate_limit_api.py monitoring.py search_providers.py scripts/package_extension.py scripts/load_test.py scripts/check_custom_domain.py scripts/generate_extension_store_assets.py
+          python -m py_compile app.py launch.py persistent_launch.py auth_launch.py auth_launch_celery.py supabase_auth_ui.py auth_roles.py admin_dashboard.py evidence_export.py moderation_actions.py moderation_console.py owasp_hardening.py hardware_inference.py external_queue.py queue_worker.py celery_queue.py production_observability.py telemetry_integrations.py custom_domain.py db_storage.py security_jobs.py jobs_api.py persistent_jobs.py rate_limit_api.py monitoring.py search_providers.py scripts/package_extension.py scripts/load_test.py scripts/check_custom_domain.py scripts/generate_extension_store_assets.py
 
       - name: Shell syntax check
         run: sh -n scripts/start_production.sh
