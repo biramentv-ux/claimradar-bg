@@ -11,8 +11,16 @@
   <main class="shell">
     <section class="card">
       <div class="kicker">ClaimRadar BG · Local AI Desktop</div>
-      <h1>Стартирам локалния backend…</h1>
-      <p>Desktop shell-ът очаква локален Python/FastAPI sidecar на <code>127.0.0.1</code>. Ако виждаш този екран дълго, backend executable-ът още не е build-нат или не е намерен в resources/backend.</p>
+      <h1>Backend-ът не тръгна автоматично</h1>
+      <p>Натисни големия бутон. Приложението ще опита да стартира локалния Python/FastAPI backend отново и ще покаже какво става.</p>
+      <div class="actions">
+        <button onclick="startBackend()">🟢 Стартирай backend</button>
+        <button onclick="checkNow()" class="secondary">🔍 Провери</button>
+        <button onclick="openDesktop()" class="secondary">🌐 Отвори в браузър</button>
+      </div>
+      <div class="hint">
+        Ако пак не тръгне: build-ни backend-а с <code>python scripts/build_desktop_backend.py --clean</code> или свали новия GitHub Actions artifact.
+      </div>
       <pre id="status">Проверка…</pre>
     </section>
   </main>
