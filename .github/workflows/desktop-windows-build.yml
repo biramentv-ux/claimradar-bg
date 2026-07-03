@@ -1,0 +1,60 @@
+name: Desktop Windows Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "local_*.py"
+      - "scripts/build_desktop_backend.py"
+      - "scripts/build_windows_portable.py"
+      - ".github/workflows/desktop-windows-build.yml"
+
+jobs:
+  build-windows-desktop:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      APP_PORT: "8765"
+      LOCAL_AI_ENABLED: "1"
+      LOCAL_AI_MODE: "offline"
+      LOCAL_AI_PROFILE: "auto"
+      MODEL_MANAGER_ENABLED: "1"
+      DB_ENABLED: "0"
+      AUTH_ENABLED: "0"
+      RATE_LIMIT_ENABLED: "0"
+      SUPABASE_AUTH_UI_ENABLED: "0"
+      OLLAMA_BASE_URL: "http://127.0.0.1:11434"
+      WHISPER_MODEL_SIZE: "tiny"
+      WHISPER_DEVICE: "cpu"
+      WHISPER_COMPUTE_TYPE: "int8"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build local backend
+        run: python scripts/build_desktop_backend.py --clean
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: desktop/electron/package.json
+      - name: Install Electron dependencies
+        working-directory: desktop/electron
+        run: npm install
+      - name: Build desktop package
+        working-directory: desktop/electron
+        run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClaimRadarBG-Windows-Desktop
+          path: dist/desktop
+          if-no-files-found: warn
