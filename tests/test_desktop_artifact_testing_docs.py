@@ -6,3 +6,5 @@ def test_desktop_artifact_testing_doc_exists():
     assert "не се изпраща `.exe`" in doc
     assert "test_desktop_artifact.py" in doc
     assert "ClaimRadarBG-Windows-Desktop.zip" in doc
+    assert "ClaimRadarBG-Windows-Desktop.7z" in doc
+    assert "py7zr" in doc
