@@ -8,6 +8,8 @@ PAGE = """
 <style>body{font-family:Arial;background:#020617;color:#e5e7eb;margin:0}.wrap{max-width:960px;margin:auto;padding:28px}.card{background:#0f172a;border:1px solid #164e63;border-radius:18px;padding:18px;margin:12px 0}a{color:#67e8f9;font-weight:bold}</style></head>
 <body><main class='wrap'><h1>ClaimRadar BG Desktop</h1><p>Локален навигационен център.</p>
 <div class='card'><a href='/'>Analyze Text</a></div>
+<div class='card'><a href='/mobile/pair'>Pair Phone Remote</a><p>Телефонът е дистанционно, а компютърът изпълнява локалните AI задачи.</p></div>
+<div class='card'><a href='/mobile'>Mobile Remote UI</a></div>
 <div class='card'><a href='/local-ai/models'>Local Model Manager</a></div>
 <div class='card'><a href='/api/local-ai/evidence/status'>Evidence Mode Status</a></div>
 <div class='card'><a href='/api/local-ai/archive/status'>Local Archive Status</a></div>
