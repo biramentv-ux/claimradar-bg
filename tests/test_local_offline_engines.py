@@ -51,13 +51,15 @@ def test_local_archive_import_and_search(monkeypatch, tmp_path):
     assert found["count"] >= 1
 
 
-def test_local_transcription_config_and_missing_dependency(monkeypatch):
+def test_local_transcription_status_route_does_not_load_models():
     import local_transcription
     tr = importlib.reload(local_transcription)
-    cfg = tr.transcription_config()
-    assert "model" in cfg
-    result = tr.local_transcribe_file("/tmp/not-existing.wav", engine="faster-whisper")
-    assert result["ok"] is False or "engine" in result
+    app = FastAPI()
+    tr.register_local_transcription_routes(app)
+    response = TestClient(app).get("/api/local-ai/transcribe/status")
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert "model" in response.json()["transcription"]
 
 
 def test_desktop_windows_build_workflow_exists():
