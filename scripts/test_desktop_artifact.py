@@ -5,17 +5,14 @@ import hashlib
 import json
 import os
 import platform
-import shutil
 import subprocess
-import sys
 import tempfile
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List
 
-WINDOWS_EXE_NAMES = {"claimradarbg.exe", "claimradar_backend.exe"}
-SUPPORTED_ARCHIVES = {".zip"}
-UNSUPPORTED_ARCHIVES = {".7z", ".rar", ".tar", ".gz", ".xz"}
+SUPPORTED_ARCHIVES = {".zip", ".7z"}
+UNSUPPORTED_ARCHIVES = {".rar", ".tar", ".gz", ".xz"}
 
 
 def sha256(path: Path) -> str:
@@ -36,18 +33,55 @@ def list_tree(root: Path, limit: int = 5000) -> List[str]:
     return sorted(rows)
 
 
+def _safe_destination(root: Path, member_name: str) -> bool:
+    destination = (root / member_name).resolve()
+    try:
+        destination.relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _validate_zip_members(archive: Path, target: Path) -> None:
+    with zipfile.ZipFile(archive) as zf:
+        bad = [name for name in zf.namelist() if not _safe_destination(target, name)]
+        if bad:
+            raise SystemExit(f"Unsafe archive paths detected: {bad[:5]}")
+
+
+def _extract_zip(archive: Path, target: Path) -> None:
+    _validate_zip_members(archive, target)
+    with zipfile.ZipFile(archive) as zf:
+        zf.extractall(target)
+
+
+def _extract_7z(archive: Path, target: Path) -> None:
+    try:
+        import py7zr
+    except Exception as exc:
+        raise SystemExit("7z artifact support requires py7zr. Install with: pip install py7zr") from exc
+    with py7zr.SevenZipFile(archive, mode="r") as zf:
+        names = zf.getnames()
+        bad = [name for name in names if not _safe_destination(target, name)]
+        if bad:
+            raise SystemExit(f"Unsafe archive paths detected: {bad[:5]}")
+        zf.extractall(path=target)
+
+
 def extract_if_supported(artifact: Path, workdir: Path) -> Path:
     suffix = artifact.suffix.lower()
     if artifact.is_dir():
         return artifact
     if suffix in UNSUPPORTED_ARCHIVES:
-        raise SystemExit(f"Unsupported archive {suffix}. Re-upload the GitHub artifact as .zip so it can be tested in this environment.")
+        raise SystemExit(f"Unsupported archive {suffix}. Expected .zip, .7z, or extracted folder.")
     if suffix not in SUPPORTED_ARCHIVES:
-        raise SystemExit(f"Unsupported artifact type {suffix}. Expected .zip or extracted folder.")
+        raise SystemExit(f"Unsupported artifact type {suffix}. Expected .zip, .7z, or extracted folder.")
     target = workdir / "artifact"
     target.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(artifact) as zf:
-        zf.extractall(target)
+    if suffix == ".7z":
+        _extract_7z(artifact, target)
+    else:
+        _extract_zip(artifact, target)
     return target
 
 
@@ -106,7 +140,7 @@ def windows_runtime_smoke(root: Path, seconds: int = 20) -> Dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-test ClaimRadar BG desktop artifact layout")
-    parser.add_argument("artifact", help="Path to GitHub artifact .zip or extracted folder")
+    parser.add_argument("artifact", help="Path to GitHub artifact .zip/.7z or extracted folder")
     parser.add_argument("--runtime", action="store_true", help="Run backend runtime smoke test when executed on Windows")
     parser.add_argument("--json", action="store_true", help="Print JSON only")
     args = parser.parse_args()
@@ -121,10 +155,7 @@ def main() -> int:
         report["layout"] = layout_checks(root)
         if args.runtime:
             report["runtime"] = windows_runtime_smoke(root)
-    if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-    else:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
+    print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report.get("layout", {}).get("ok") else 2
 
 
