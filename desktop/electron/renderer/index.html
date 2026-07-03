@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src http://127.0.0.1:*;" />
+  <title>ClaimRadar BG Desktop</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <div class="kicker">ClaimRadar BG · Local AI Desktop</div>
+      <h1>Стартирам локалния backend…</h1>
+      <p>Desktop shell-ът очаква локален Python/FastAPI sidecar на <code>127.0.0.1</code>. Ако виждаш този екран дълго, backend executable-ът още не е build-нат или не е намерен в resources/backend.</p>
+      <pre id="status">Проверка…</pre>
+    </section>
+  </main>
+  <script src="renderer.js"></script>
+</body>
+</html>
