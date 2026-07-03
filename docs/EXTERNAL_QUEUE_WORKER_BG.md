@@ -2,12 +2,14 @@
 
 Този слой изнася тежките jobs извън основния FastAPI/Gradio процес.
 
-FastAPI `BackgroundTasks` са удобни за задачи след връщане на response, но при тежки изчисления е по-добре да се използва отделен worker / task queue. External queue режимът прави точно това: API процесът само записва job, а отделен процес `queue_worker.py` го изпълнява.
+FastAPI `BackgroundTasks` са удобни за малки задачи след връщане на response, но при тежки изчисления е по-добре да се използва отделен worker / task queue. External queue режимът прави точно това: API процесът само записва job, а отделен процес `queue_worker.py` го изпълнява.
 
 ## Файлове
 
 ```text
 external_queue.py
+queue_backends.py
+postgres_queue.py
 queue_worker.py
 scripts/start_production.sh
 ```
@@ -17,70 +19,87 @@ scripts/start_production.sh
 ```text
 /queue/status
 /api/queue/status
+/jobs
+/api/jobs
+/api/jobs/stats
+/api/jobs/<job_id>
+/api/jobs/<job_id>/cancel
+/api/jobs/<job_id>/retry
 ```
 
 ## Режими
 
-### Стандартен режим — thread executor
+### Thread режим
 
 ```bash
 JOB_EXECUTION_MODE=thread
 QUEUE_WORKER_AUTOSTART=0
 ```
 
-Това запазва досегашното поведение — jobs се изпълняват вътре в web app процеса чрез `ThreadPoolExecutor`.
+Това запазва досегашното поведение — jobs се изпълняват вътре в web app процеса.
 
-### External queue режим
+### External JSONL режим
 
 ```bash
 JOB_EXECUTION_MODE=external
+QUEUE_BACKEND=jsonl
 QUEUE_WORKER_AUTOSTART=1
 QUEUE_POLL_SECONDS=2.0
 QUEUE_BATCH_SIZE=1
 QUEUE_STALE_RUNNING_SECONDS=1800
 ```
 
-В този режим:
+Този режим е подходящ, когато web process и worker process са в един и същ container / shared filesystem.
 
-- `/api/jobs/check`, `/api/jobs/ai-verdict`, `/api/jobs/real-check` само enqueue-ват job;
-- job payload-ите се записват в `data/job_payloads.jsonl`;
-- job state се записва в `data/jobs.jsonl`;
-- worker heartbeat се записва в `data/queue_worker_heartbeats.jsonl`;
-- отделният процес `python queue_worker.py` claim-ва и изпълнява job-овете.
-
-## Стартиране в Docker / Hugging Face Space
-
-Dockerfile вече стартира:
-
-```bash
-/bin/sh /app/scripts/start_production.sh
-```
-
-Ако `QUEUE_WORKER_AUTOSTART=1` или `JOB_EXECUTION_MODE=external`, script-ът стартира worker в background и после web app процеса.
-
-Пример Hugging Face Variables:
+### External Postgres/Supabase режим — препоръчителен за отделен worker
 
 ```bash
 JOB_EXECUTION_MODE=external
-QUEUE_WORKER_AUTOSTART=1
-QUEUE_POLL_SECONDS=2.0
-QUEUE_BATCH_SIZE=1
-QUEUE_STALE_RUNNING_SECONDS=1800
+QUEUE_BACKEND=postgres
+QUEUE_WORKER_AUTOSTART=0
+DB_ENABLED=1
+DATABASE_URL=<postgres-connection-string>
 ```
 
-## Стартиране само на worker
+В този режим UI процесът записва jobs в `public.claimradar_jobs`, а отделен worker процес/контейнер ги claim-ва и изпълнява. Това е подходящо за разделяне на UI Space и Worker Space, защото общото състояние е в Supabase/Postgres, не в локален файл.
 
-За отделен контейнер/машина:
+## Стартиране на отделен worker процес
+
+В отделен container/Space/машина за worker сложи:
+
+```bash
+APP_ROLE=worker
+WORKER_ONLY_MODE=1
+JOB_EXECUTION_MODE=external
+QUEUE_BACKEND=postgres
+QUEUE_POLL_SECONDS=2.0
+QUEUE_BATCH_SIZE=1
+DB_ENABLED=1
+DATABASE_URL=<same-postgres-connection-string>
+```
+
+Startup script-ът ще изпълни само:
 
 ```bash
 python queue_worker.py --poll 2 --batch 1
 ```
 
-За тестово изпълнение на един job:
+и няма да стартира Gradio/FastAPI UI.
+
+## UI process variables
+
+В основния web app / UI Space:
 
 ```bash
-python queue_worker.py --once
+APP_ROLE=web
+JOB_EXECUTION_MODE=external
+QUEUE_BACKEND=postgres
+QUEUE_WORKER_AUTOSTART=0
+DB_ENABLED=1
+DATABASE_URL=<same-postgres-connection-string>
 ```
+
+Така `/api/jobs/check`, `/api/jobs/ai-verdict` и `/api/jobs/real-check` само enqueue-ват jobs. Тежкото изпълнение е извън UI процеса.
 
 ## Проверка
 
@@ -90,14 +109,31 @@ curl https://claimradar.dyrakarmy.eu/api/jobs/stats
 curl https://claimradar.dyrakarmy.eu/api/jobs?status=queued
 ```
 
+Очаквай:
+
+```json
+{
+  "queue_backend": "postgres",
+  "store_type": "PostgresQueueBackedJobStore",
+  "external_store_active": true
+}
+```
+
 ## Защо е по-добре
 
-- HTTP процесът не блокира при тежък AI/transcription job;
+- HTTP/UI процесът не блокира при тежък AI/transcription/video job;
 - worker-ът може да се рестартира отделно;
-- може да се добавят повече workers по-късно;
-- queue state е durable през JSONL файловете на Space-а;
-- retry/cancel/status API остава същото.
+- може да се добавят повече workers;
+- queue state е durable в Supabase/Postgres;
+- retry/cancel/status API остава същото;
+- worker-only режимът не стартира web app и не заема UI resources.
+
+## Тестове
+
+```bash
+pytest tests/test_external_worker_queue.py
+```
 
 ## Следваща стъпка
 
-Този JSONL queue слой е production-safe за малък/среден трафик. При по-голям трафик следващата стъпка е Redis/RabbitMQ + Celery/RQ/Arq worker deployment.
+За много голям трафик остава възможност за Redis/RabbitMQ + Celery, но `QUEUE_BACKEND=postgres` вече позволява реален отделен worker без да товари основния app процес.
