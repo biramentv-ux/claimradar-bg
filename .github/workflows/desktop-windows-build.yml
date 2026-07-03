@@ -29,6 +29,8 @@ jobs:
       WHISPER_MODEL_SIZE: "tiny"
       WHISPER_DEVICE: "cpu"
       WHISPER_COMPUTE_TYPE: "int8"
+      CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -53,6 +55,12 @@ jobs:
       - name: Build desktop package
         working-directory: desktop/electron
         run: npm run dist
+      - name: Build summary
+        shell: pwsh
+        run: |
+          "## ClaimRadar BG Windows Desktop" >> $env:GITHUB_STEP_SUMMARY
+          "Output: dist/desktop" >> $env:GITHUB_STEP_SUMMARY
+          "Signing enabled: $([bool]$env:CSC_LINK)" >> $env:GITHUB_STEP_SUMMARY
       - uses: actions/upload-artifact@v4
         with:
           name: ClaimRadarBG-Windows-Desktop
