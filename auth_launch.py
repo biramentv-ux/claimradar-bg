@@ -16,13 +16,13 @@ from auth_roles import is_admin_key, register_auth_routes
 from custom_domain import register_custom_domain_routes
 from db_storage import storage
 from evidence_export import register_evidence_export_routes
-from external_queue import maybe_external_job_store, register_external_queue_routes
 from jobs_api import register_job_routes
 from moderation_actions import register_moderation_routes
 from moderation_console import register_moderation_console_routes
 from monitoring import MonitoringMiddleware
 from owasp_hardening import OWASPHardeningMiddleware, register_owasp_routes
 from production_observability import register_observability_routes
+from queue_backends import maybe_external_job_store, register_queue_backend_routes
 from rate_limit_api import register_rate_limit_routes
 from security_jobs import SecurityAndRateLimitMiddleware
 from supabase_auth_ui import register_supabase_auth_ui_routes
@@ -31,7 +31,7 @@ from telemetry_integrations import init_telemetry, register_sentry_routes, regis
 base_launch.job_store = maybe_external_job_store(base_launch.job_store, app_module.DATA_DIR)
 persistent.can_admin = is_admin_key
 
-app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.6-supabase-auth-ui")
+app = FastAPI(title="ClaimRadar BG Auth Layer", version="4.7-external-worker")
 app.add_middleware(SecurityAndRateLimitMiddleware)
 app.add_middleware(MonitoringMiddleware)
 app.add_middleware(OWASPHardeningMiddleware)
@@ -65,7 +65,7 @@ register_custom_domain_routes(app)
 register_auth_routes(app, can_admin)
 register_supabase_auth_ui_routes(app)
 register_inference_routes(app, app_module)
-register_external_queue_routes(app, base_launch.job_store)
+register_queue_backend_routes(app, base_launch.job_store)
 register_observability_routes(app, can_admin, base_launch.job_store, storage, persistent._original_read_jsonl)
 register_telemetry_routes(app)
 register_sentry_routes(app, can_admin)
