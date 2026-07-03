@@ -4,6 +4,7 @@ const { spawn } = require('node:child_process');
 
 const BACKEND_PORT = process.env.CLAIMRADAR_LOCAL_PORT || '8765';
 const LOCAL_URL = `http://127.0.0.1:${BACKEND_PORT}`;
+const DESKTOP_URL = `${LOCAL_URL}/desktop`;
 let backendProcess = null;
 
 function backendExecutable() {
@@ -20,6 +21,10 @@ function startBackend() {
     LOCAL_AI_ENABLED: '1',
     LOCAL_AI_MODE: process.env.LOCAL_AI_MODE || 'offline',
     LOCAL_AI_PROFILE: process.env.LOCAL_AI_PROFILE || 'auto',
+    MODEL_MANAGER_ENABLED: '1',
+    LOCAL_LLM_ENABLED: '1',
+    LOCAL_SQLITE_ENABLED: '1',
+    LOCAL_ARCHIVE_ENABLED: '1',
     OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
     SUPABASE_AUTH_UI_ENABLED: '0',
     AUTH_ENABLED: '0',
@@ -68,7 +73,7 @@ async function createWindow() {
 
   const ready = await waitForBackend();
   if (ready) {
-    await win.loadURL(LOCAL_URL);
+    await win.loadURL(DESKTOP_URL);
   } else {
     await win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   }
