@@ -11,7 +11,8 @@ from hardware_inference import configure_app_module
 configure_app_module(app_module)
 
 import launch as base_launch
-from external_queue import QueueBackedJobStore, QueueWorker
+from external_queue import QueueWorker
+from queue_backends import QUEUE_BACKEND, build_external_job_store
 
 
 def job_functions():
@@ -31,14 +32,14 @@ def main() -> int:
     parser.add_argument("--worker-id", default=os.getenv("QUEUE_WORKER_ID", ""), help="Stable worker id")
     args = parser.parse_args()
 
-    store = QueueBackedJobStore(Path(args.data_dir))
-    worker = QueueWorker(store, job_functions(), worker_id=args.worker_id or None or "queue-worker")
+    store = build_external_job_store(Path(args.data_dir))
+    worker = QueueWorker(store, job_functions(), worker_id=args.worker_id or "queue-worker")
     if args.once:
         print(worker.process_one())
         return 0
-    print({"ok": True, "message": "ClaimRadar BG queue worker started", "poll": args.poll, "batch": args.batch, "data_dir": args.data_dir})
+    print({"ok": True, "message": "ClaimRadar BG queue worker started", "backend": QUEUE_BACKEND, "poll": args.poll, "batch": args.batch, "data_dir": args.data_dir})
     worker.loop(poll_seconds=args.poll, batch_size=args.batch)
-    print({"ok": True, "message": "ClaimRadar BG queue worker stopped"})
+    print({"ok": True, "message": "ClaimRadar BG queue worker stopped", "backend": QUEUE_BACKEND})
     return 0
 
 
