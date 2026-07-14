@@ -3,7 +3,6 @@ from __future__ import annotations
 import compileall
 import os
 from pathlib import Path
-from typing import Iterable
 
 from huggingface_hub import HfApi
 
@@ -71,7 +70,7 @@ def deploy_space() -> str:
 
     try:
         api.update_repo_settings(repo_id=SPACE_ID, repo_type="space", private=False)
-    except Exception as exc:  # Visibility is already public on existing Spaces in most cases.
+    except Exception as exc:
         print(f"Visibility update warning: {exc}")
 
     commit = api.upload_folder(
@@ -82,6 +81,13 @@ def deploy_space() -> str:
         ignore_patterns=IGNORE_PATTERNS,
         delete_patterns=["*"],
     )
+
+    try:
+        api.restart_space(repo_id=SPACE_ID)
+        print("SPACE_RESTART_REQUESTED")
+    except Exception as exc:
+        print(f"Space restart warning: {exc}")
+
     return str(commit)
 
 
