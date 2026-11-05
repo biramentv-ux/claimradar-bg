@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 TEST_ENV = {
     "DB_ENABLED": "0",
+    "DESKTOP_FEATURES_ENABLED": "1",
     "RATE_LIMIT_ENABLED": "0",
     "MONITORING_ENABLED": "1",
     "REQUEST_LOG_ENABLED": "0",

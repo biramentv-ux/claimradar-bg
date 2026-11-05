@@ -61,6 +61,14 @@ jobs:
             --exclude "__pycache__/*" \
             --exclude "*.pyc" \
             --exclude "data/*" \
+            --exclude "desktop/*" \
+            --exclude "easy_remote_access.py" \
+            --exclude "mobile_remote_control.py" \
+            --exclude "run_realtime_server.*" \
+            --delete "desktop/*" \
+            --delete "easy_remote_access.py" \
+            --delete "mobile_remote_control.py" \
+            --delete "run_realtime_server.*" \
             --commit-message "Sync from GitHub ${GITHUB_SHA::7}"
 
       - name: Summary

@@ -4,6 +4,7 @@ import os
 
 # Local desktop defaults: no cloud dependency unless the user explicitly enables it.
 os.environ.setdefault("APP_PORT", "8765")
+os.environ.setdefault("DESKTOP_FEATURES_ENABLED", "1")
 os.environ.setdefault("LOCAL_AI_ENABLED", "1")
 os.environ.setdefault("LOCAL_AI_MODE", "offline")
 os.environ.setdefault("LOCAL_AI_PROFILE", "auto")

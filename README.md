@@ -111,6 +111,7 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - **Поправен crash на главната страница**: `gradio==5.9.1` гърми с `TypeError` на `/` и `/gradio_api/info` при `pydantic>=2.11`. `requirements.txt` вече пинва `pydantic==2.10.6`, така че свежите Docker build-ове на Space-а рендерират UI-а.
 - **`/robots.txt` и `/sitemap.xml`** за публичния домейн: sitemap-ът изброява публичните страници на `PUBLIC_BASE_URL` (по подразбиране `https://claimradar.dyrakarmy.eu`); robots забранява `/admin`, `/api/` и `/monitoring/logs`.
 - **`LOCAL_LLM_MODEL`** вече има приоритет пред профила на model manager-а (преди се игнорираше).
+- **Server режим без desktop функции**: в Hugging Face Space (`SPACE_ID`) и в Docker (`DESKTOP_FEATURES_ENABLED=0`) не се регистрират локалните AI/модел/тунел/мобилни route-ове (`/remote-simple`, `/api/remote-simple/*`, `/mobile*`, `/api/local-*` и др.). Преди `POST /api/remote-simple/start` беше публичен и стартираше cloudflared/ngrok на сървъра. `easy_remote_access.py`, `mobile_remote_control.py` и `desktop/` вече не се качват в Space-а. Desktop версията (`local_desktop_launch.py`) ги запазва.
 - **Тестовете не зависят от реда**: `tests/conftest.py` задава една тестова среда преди collection; rate-limit тестовете включват limiter-а само за себе си.
 
 ### Публично пускане (чеклист)

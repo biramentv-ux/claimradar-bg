@@ -31,6 +31,11 @@ IGNORE_PATTERNS = [
     ".env.*",
     "*.zip",
     "*.7z",
+    # Desktop-only code (local tunnels, phone remote) never ships to the public Space.
+    "desktop/**",
+    "easy_remote_access.py",
+    "mobile_remote_control.py",
+    "run_realtime_server.*",
 ]
 
 
