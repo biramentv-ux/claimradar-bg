@@ -114,6 +114,14 @@ Hugging Face-ready Docker приложение за България с Gradio U
 - **Server режим без desktop функции**: в Hugging Face Space (`SPACE_ID`) и в Docker (`DESKTOP_FEATURES_ENABLED=0`) не се регистрират локалните AI/модел/тунел/мобилни route-ове (`/remote-simple`, `/api/remote-simple/*`, `/mobile*`, `/api/local-*` и др.). Преди `POST /api/remote-simple/start` беше публичен и стартираше cloudflared/ngrok на сървъра. `easy_remote_access.py`, `mobile_remote_control.py` и `desktop/` вече не се качват в Space-а. Desktop версията (`local_desktop_launch.py`) ги запазва.
 - **Тестовете не зависят от реда**: `tests/conftest.py` задава една тестова среда преди collection; rate-limit тестовете включват limiter-а само за себе си.
 
+### Собствен VPS (Docker + Caddy HTTPS)
+
+Пълно ръководство: `docs/VPS_DEPLOY_BG.md`. DNS: `A claimradar → <IP>`, после от Windows:
+
+```powershell
+ssh root@<IP> "curl -fsSL https://raw.githubusercontent.com/biramentv-ux/claimradar-bg/main/deploy/vps/install.sh | bash"
+```
+
 ### Публично пускане (чеклист)
 
 Най-бързо от Windows (PowerShell) — сваля паузата, рестартира Space-а, задава Variables/Secrets и проверява `/health`:

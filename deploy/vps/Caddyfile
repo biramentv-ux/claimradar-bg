@@ -1,0 +1,21 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Uploads (audio/video) up to the app's own MAX_REQUEST_BYTES-style limits.
+	request_body {
+		max_size 100MB
+	}
+
+	# WebSocket (realtime) is proxied automatically.
+	reverse_proxy app:7860 {
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

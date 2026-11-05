@@ -1,0 +1,55 @@
+# ClaimRadar BG on your own VPS: app + Caddy (automatic HTTPS via Let's Encrypt).
+# Started by deploy/vps/install.sh from the repository root:
+#   docker compose -f deploy/vps/docker-compose.yml --env-file .env up -d --build
+#
+# The app port (7860) is NOT published to the internet: only Caddy (80/443) is.
+# Caddy replaces any client-sent X-Forwarded-For with the real client IP, so
+# rate limiting cannot be bypassed by spoofing that header.
+
+name: claimradar
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      APP_PORT: "7860"
+      DESKTOP_FEATURES_ENABLED: "0"
+    expose:
+      - "7860"
+    volumes:
+      - claimradar_data:/app/data
+      - model_cache:/root/.cache
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7860/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-claimradar.dyrakarmy.eu}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  claimradar_data:
+  model_cache:
+  caddy_data:
+  caddy_config:
