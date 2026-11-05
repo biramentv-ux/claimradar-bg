@@ -1,16 +1,9 @@
 name: Deploy Hugging Face Space
 
+# Manual fallback only. Automatic deploys run through sync-to-hf.yml on every
+# push to main; running both uploaded the same commit twice.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "**/*.py"
-      - "Dockerfile"
-      - "README.md"
-      - "requirements*.txt"
-      - "scripts/start_production.sh"
-      - ".github/workflows/deploy-huggingface-space.yml"
 
 concurrency:
   group: deploy-huggingface-space
@@ -38,7 +31,7 @@ jobs:
       - name: Install validation dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          pip install -r requirements.txt -r requirements-dev.txt
           pip install "huggingface_hub>=0.34.0"
 
       - name: Validate Python sources
