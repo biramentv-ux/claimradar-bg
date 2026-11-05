@@ -1,4 +1,7 @@
+import pytest
 from fastapi import FastAPI
+
+import security_jobs
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
@@ -24,9 +27,15 @@ def make_client():
     return TestClient(app)
 
 
-def setup_function():
+@pytest.fixture(autouse=True)
+def rate_limit_on(monkeypatch):
+    # The suite runs with RATE_LIMIT_ENABLED=0 (see conftest.py); these tests
+    # exercise the limiter itself, so switch it on for this module only.
+    monkeypatch.setattr(security_jobs, "RATE_LIMIT_ENABLED", True)
     rate_limiter.reset(all_keys=True)
     rate_limiter.exempt_total = 0
+    yield
+    rate_limiter.reset(all_keys=True)
 
 
 def test_root_get_does_not_create_temporary_ban():

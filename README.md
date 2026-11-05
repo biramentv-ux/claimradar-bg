@@ -102,7 +102,25 @@ Hugging Face-ready Docker приложение за България с Gradio U
 /api/jobs/cleanup
 /check/<share_id>
 /api/check/<share_id>
+/robots.txt
+/sitemap.xml
 ```
+
+## Версия 4.6 — Public Launch Fixes
+
+- **Поправен crash на главната страница**: `gradio==5.9.1` гърми с `TypeError` на `/` и `/gradio_api/info` при `pydantic>=2.11`. `requirements.txt` вече пинва `pydantic==2.10.6`, така че свежите Docker build-ове на Space-а рендерират UI-а.
+- **`/robots.txt` и `/sitemap.xml`** за публичния домейн: sitemap-ът изброява публичните страници на `PUBLIC_BASE_URL` (по подразбиране `https://claimradar.dyrakarmy.eu`); robots забранява `/admin`, `/api/` и `/monitoring/logs`.
+- **`LOCAL_LLM_MODEL`** вече има приоритет пред профила на model manager-а (преди се игнорираше).
+- **Тестовете не зависят от реда**: `tests/conftest.py` задава една тестова среда преди collection; rate-limit тестовете включват limiter-а само за себе си.
+
+### Публично пускане (чеклист)
+
+1. Push в `main` → GitHub Action `Deploy Hugging Face Space` качва кода в `DyrakArmy/claimradar-bg` (нужен е secret `HF_TOKEN` с write достъп).
+2. SuperHosting DNS: `CNAME claimradar → hf.space` (TTL 3600). Не се насочва към IP.
+3. Space Settings → Custom Domain: `claimradar.dyrakarmy.eu` (изисква HF PRO/Team/Enterprise и public/protected Space; статусът минава от `pending` в `ready`, щом CNAME-ът резолвне към `hf.space`). Без PRO сайтът остава достъпен на `https://dyrakarmy-claimradar-bg.hf.space`.
+4. Space Variables: `PUBLIC_BASE_URL=https://claimradar.dyrakarmy.eu`, `CUSTOM_DOMAIN`, `ROOT_DOMAIN`, `HF_SPACE_URL`.
+5. Space Secrets: `OWNER_KEY`/`ADMIN_KEY`, `AUTH_TOKEN_SALT`, `RATE_LIMIT_HASH_SALT`, по желание `OPENAI_API_KEY`, `DATABASE_URL`, search API ключове.
+6. Проверка: `python scripts/check_custom_domain.py` или workflow-а `Custom Domain Check`.
 
 ## Версия 4.5 — Expanded OWASP Security Hardening
 

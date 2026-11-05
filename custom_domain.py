@@ -5,7 +5,7 @@ from html import escape
 from typing import Any, Dict
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 DEFAULT_CUSTOM_DOMAIN = "claimradar.dyrakarmy.eu"
 DEFAULT_ROOT_DOMAIN = "dyrakarmy.eu"
@@ -80,7 +80,53 @@ HF_SPACE_URL={escape(cfg['hf_space_url'])}</pre></section>
 </main></body></html>"""
 
 
+PUBLIC_SITEMAP_PATHS = (
+    "/",
+    "/product",
+    "/about",
+    "/methodology",
+    "/sources",
+    "/privacy",
+    "/terms",
+    "/contact",
+    "/jobs",
+)
+
+
+def robots_txt() -> str:
+    base = custom_domain_config()["public_base_url"].rstrip("/")
+    return "\n".join(
+        [
+            "User-agent: *",
+            "Allow: /",
+            "Disallow: /admin",
+            "Disallow: /api/",
+            "Disallow: /monitoring/logs",
+            f"Sitemap: {base}/sitemap.xml",
+            "",
+        ]
+    )
+
+
+def sitemap_xml() -> str:
+    base = custom_domain_config()["public_base_url"].rstrip("/")
+    urls = "".join(f"<url><loc>{escape(base + path)}</loc></url>" for path in PUBLIC_SITEMAP_PATHS)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{urls}</urlset>"
+    )
+
+
 def register_custom_domain_routes(app: FastAPI) -> None:
+    @app.get("/robots.txt", response_class=PlainTextResponse)
+    def robots():
+        return PlainTextResponse(robots_txt())
+
+    @app.get("/sitemap.xml")
+    def sitemap():
+        return Response(content=sitemap_xml(), media_type="application/xml")
+
     @app.get("/custom-domain", response_class=HTMLResponse)
     def custom_domain_page():
         return HTMLResponse(custom_domain_html())

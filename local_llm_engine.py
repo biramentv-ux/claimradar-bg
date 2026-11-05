@@ -25,6 +25,10 @@ def _ollama_url(path: str) -> str:
 
 
 def _model_from_profile() -> str:
+    explicit = os.getenv("LOCAL_LLM_MODEL", "").strip()
+    if explicit:
+        # An explicit env override always wins over the model-manager profile.
+        return explicit
     try:
         from local_model_manager import read_model_config
 
