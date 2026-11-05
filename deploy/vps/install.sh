@@ -125,6 +125,22 @@ if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
     ok "ufw: 22, 80, 443 open"
 fi
 
+# Oracle Cloud Ubuntu images ship iptables rules that REJECT everything but SSH,
+# even with ufw inactive. Open 80/443 before that REJECT rule and persist it.
+if command -v iptables >/dev/null 2>&1 && iptables -S INPUT 2>/dev/null | grep -q -- "-j REJECT"; then
+    for port in 80 443; do
+        iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null \
+            || iptables -I INPUT 1 -p tcp --dport "$port" -j ACCEPT
+    done
+    iptables -C INPUT -p udp --dport 443 -j ACCEPT 2>/dev/null \
+        || iptables -I INPUT 1 -p udp --dport 443 -j ACCEPT
+    if command -v netfilter-persistent >/dev/null 2>&1; then
+        netfilter-persistent save >/dev/null 2>&1 || true
+    fi
+    ok "iptables: 80, 443 open (Oracle-style REJECT rules detected)"
+    warn "Oracle Cloud: also open TCP 80 and 443 in the VCN Security List (Ingress, 0.0.0.0/0)."
+fi
+
 # 6. DNS check
 SERVER_IP=$(curl -fsS -4 --max-time 10 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
 DNS_IP=$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk 'NR==1 {print $1}')

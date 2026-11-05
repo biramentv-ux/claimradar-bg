@@ -8,6 +8,13 @@
 - SSH достъп като `root` (или потребител със `sudo`).
 - Достъп до DNS на `dyrakarmy.eu` (SuperHosting).
 
+## Безплатен VPS: Oracle Cloud Always Free
+
+- Shape **VM.Standard.A1.Flex** (ARM, Ubuntu 24.04): до **2 OCPU / 12 GB RAM** безплатно (от юни 2026, преди 4/24). Нужна е карта за верификация.
+- В VCN → Security List добави Ingress правила за TCP **80** и **443** от `0.0.0.0/0`. Вътрешните iptables правила на Oracle образа `install.sh` ги отваря сам.
+- При „Out of host capacity“ опитай друг Availability Domain или по-късно.
+- SSH като `ubuntu` (не root): `ssh ubuntu@<IP> "curl -fsSL .../install.sh | sudo bash"`.
+
 ## 1. DNS (SuperHosting)
 
 Добави **A запис**: `claimradar` → `<IP на VPS-а>`, TTL 3600.
