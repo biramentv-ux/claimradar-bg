@@ -23,5 +23,8 @@ def test_go_live_script_has_no_hardcoded_secrets():
 def test_go_live_script_braces_are_balanced():
     text = SCRIPT.read_text(encoding="utf-8")
     code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    # Ignore brackets inside string literals (e.g. the "1) SuperHosting" steps).
+    code = re.sub(r'"[^"\n]*"', '""', code)
+    code = re.sub(r"'[^'\n]*'", "''", code)
     assert code.count("{") == code.count("}")
     assert code.count("(") == code.count(")")
