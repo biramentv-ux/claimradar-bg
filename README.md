@@ -115,6 +115,12 @@ Hugging Face-ready Docker приложение за България с Gradio U
 
 ### Публично пускане (чеклист)
 
+Най-бързо от Windows (PowerShell) — сваля паузата, рестартира Space-а, задава Variables/Secrets и проверява `/health`:
+
+```powershell
+irm https://raw.githubusercontent.com/biramentv-ux/claimradar-bg/main/scripts/go_live.ps1 | iex
+```
+
 1. Push в `main` → GitHub Action `Deploy Hugging Face Space` качва кода в `DyrakArmy/claimradar-bg` (нужен е secret `HF_TOKEN` с write достъп).
 2. SuperHosting DNS: `CNAME claimradar → hf.space` (TTL 3600). Не се насочва към IP.
 3. Space Settings → Custom Domain: `claimradar.dyrakarmy.eu` (изисква HF PRO/Team/Enterprise и public/protected Space; статусът минава от `pending` в `ready`, щом CNAME-ът резолвне към `hf.space`). Без PRO сайтът остава достъпен на `https://dyrakarmy-claimradar-bg.hf.space`.
